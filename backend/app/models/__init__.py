@@ -1,0 +1,169 @@
+import uuid
+from datetime import date, datetime
+
+from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, Text, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.database import Base
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    role: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class Engagement(Base):
+    __tablename__ = "engagements"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    client_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    target_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    revised_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    actual_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    status: Mapped[str] = mapped_column(String(100), default="Not Started")
+    progress_percent: Mapped[float] = mapped_column(Numeric(5, 2), default=0)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    workstreams: Mapped[list["Workstream"]] = relationship(
+        back_populates="engagement",
+        cascade="all, delete-orphan",
+    )
+
+
+class Workstream(Base):
+    __tablename__ = "workstreams"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    engagement_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("engagements.id", ondelete="CASCADE"))
+
+    external_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    objective: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scope: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    target_completion_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    revised_completion_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    actual_completion_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    status: Mapped[str] = mapped_column(String(100), default="Not Started")
+    progress_percent: Mapped[float] = mapped_column(Numeric(5, 2), default=0)
+
+    risks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    dependencies: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    engagement: Mapped["Engagement"] = relationship(back_populates="workstreams")
+    deliverables: Mapped[list["Deliverable"]] = relationship(
+        back_populates="workstream",
+        cascade="all, delete-orphan",
+    )
+
+
+class Deliverable(Base):
+    __tablename__ = "deliverables"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    workstream_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workstreams.id", ondelete="CASCADE"))
+
+    external_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    deliverable_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    target_completion_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    revised_completion_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    actual_completion_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    submission_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    approval_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    status: Mapped[str] = mapped_column(String(100), default="Not Started")
+    review_status: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    progress_percent: Mapped[float] = mapped_column(Numeric(5, 2), default=0)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    workstream: Mapped["Workstream"] = relationship(back_populates="deliverables")
+    tasks: Mapped[list["Task"]] = relationship(
+        back_populates="deliverable",
+        cascade="all, delete-orphan",
+    )
+
+
+class Task(Base):
+    __tablename__ = "tasks"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    deliverable_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("deliverables.id", ondelete="CASCADE"))
+
+    external_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    priority: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    target_completion_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    revised_completion_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    actual_completion_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    status: Mapped[str] = mapped_column(String(100), default="Not Started")
+    progress_percent: Mapped[float] = mapped_column(Numeric(5, 2), default=0)
+
+    task_findings: Mapped[str | None] = mapped_column(Text, nullable=True)
+    task_analysis: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    deliverable: Mapped["Deliverable"] = relationship(back_populates="tasks")
+    subtasks: Mapped[list["Subtask"]] = relationship(
+        back_populates="task",
+        cascade="all, delete-orphan",
+    )
+
+
+class Subtask(Base):
+    __tablename__ = "subtasks"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    task_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"))
+
+    external_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    completion_criteria: Mapped[str | None] = mapped_column(Text, nullable=True)
+    priority: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    target_completion_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    revised_completion_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    actual_completion_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    status: Mapped[str] = mapped_column(String(100), default="Not Started")
+    findings: Mapped[str | None] = mapped_column(Text, nullable=True)
+    analysis: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    task: Mapped["Task"] = relationship(back_populates="subtasks")
