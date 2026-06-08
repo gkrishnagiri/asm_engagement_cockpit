@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Annotated, Any
 
@@ -14,6 +14,7 @@ from app.models import (
     DateRevisionHistory,
     Deliverable,
     Engagement,
+    Reminder,
     Subtask,
     Task,
     Workstream,
@@ -28,6 +29,9 @@ from app.schemas import (
     EngagementRead,
     EngagementUpdate,
     HealthResponse,
+    ReminderGenerateResponse,
+    ReminderRead,
+    ReminderSnoozeRequest,
     SubtaskCreate,
     SubtaskRead,
     SubtaskUpdate,
@@ -43,7 +47,7 @@ settings = get_settings()
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.2.0",
+    version="0.3.0",
 )
 
 app.add_middleware(
@@ -56,6 +60,7 @@ app.add_middleware(
 
 
 COMPLETED_STATUS = "Completed"
+REMINDER_LOOKAHEAD_DAYS = 7
 
 
 @app.on_event("startup")
@@ -268,15 +273,238 @@ def recalculate_from_workstream(db: Session, workstream: Workstream) -> None:
     recalculate_engagement_progress(db, workstream.engagement_id)
 
 
+def get_effective_completion_date(item: Any) -> date | None:
+    revised_completion_date = getattr(item, "revised_completion_date", None)
+    target_completion_date = getattr(item, "target_completion_date", None)
+    return revised_completion_date or target_completion_date
+
+
+def get_parent_title(item: Any, parent_type: str) -> str:
+    if parent_type == "task":
+        return item.title
+    return item.name if hasattr(item, "name") else item.title
+
+
+def get_parent_external_id(item: Any) -> str | None:
+    return getattr(item, "external_id", None)
+
+
+def close_active_reminders_for_parent(db: Session, *, parent_type: str, parent_id: uuid.UUID) -> None:
+    reminders = list(
+        db.scalars(
+            select(Reminder).where(
+                Reminder.parent_type == parent_type,
+                Reminder.parent_id == parent_id,
+                Reminder.is_active.is_(True),
+            )
+        ).all()
+    )
+
+    for reminder in reminders:
+        reminder.is_active = False
+        reminder.reminder_status = "Closed"
+
+
+def classify_due_date(effective_due_date: date, today: date) -> tuple[str, str, str]:
+    if effective_due_date < today:
+        return "overdue", "Overdue", "high"
+
+    if effective_due_date == today:
+        return "due_today", "Due Today", "medium"
+
+    due_soon_threshold = today + timedelta(days=REMINDER_LOOKAHEAD_DAYS)
+    if effective_due_date <= due_soon_threshold:
+        return "due_soon", "Due Soon", "low"
+
+    return "not_due", "Not Due", "none"
+
+
+def create_or_update_due_reminder(
+    db: Session,
+    *,
+    parent_type: str,
+    item: Any,
+    today: date,
+) -> bool:
+    if is_completed(getattr(item, "status", None)):
+        close_active_reminders_for_parent(db, parent_type=parent_type, parent_id=item.id)
+        return False
+
+    effective_due_date = get_effective_completion_date(item)
+
+    if effective_due_date is None:
+        close_active_reminders_for_parent(db, parent_type=parent_type, parent_id=item.id)
+        return False
+
+    reminder_type, reminder_status, severity = classify_due_date(effective_due_date, today)
+
+    if reminder_type == "not_due":
+        close_active_reminders_for_parent(db, parent_type=parent_type, parent_id=item.id)
+        return False
+
+    parent_title = get_parent_title(item, parent_type)
+    parent_external_id = get_parent_external_id(item)
+
+    existing = db.scalar(
+        select(Reminder).where(
+            Reminder.parent_type == parent_type,
+            Reminder.parent_id == item.id,
+            Reminder.is_active.is_(True),
+        )
+    )
+
+    display_name = f"{parent_external_id} - {parent_title}" if parent_external_id else parent_title
+
+    title = f"{reminder_status}: {display_name}"
+
+    if reminder_status == "Overdue":
+        message = f"{parent_type.title()} '{display_name}' is overdue. Complete it or revise the completion date."
+    elif reminder_status == "Due Today":
+        message = f"{parent_type.title()} '{display_name}' is due today."
+    else:
+        message = (
+            f"{parent_type.title()} '{display_name}' is due within the next "
+            f"{REMINDER_LOOKAHEAD_DAYS} days."
+        )
+
+    if existing is None:
+        reminder = Reminder(
+            parent_type=parent_type,
+            parent_id=item.id,
+            parent_external_id=parent_external_id,
+            parent_title=parent_title,
+            reminder_type=reminder_type,
+            reminder_status=reminder_status,
+            severity=severity,
+            reminder_date=today,
+            effective_due_date=effective_due_date,
+            title=title,
+            message=message,
+            is_active=True,
+        )
+        db.add(reminder)
+    else:
+        existing.parent_external_id = parent_external_id
+        existing.parent_title = parent_title
+        existing.reminder_type = reminder_type
+        existing.reminder_status = reminder_status
+        existing.severity = severity
+        existing.reminder_date = today
+        existing.effective_due_date = effective_due_date
+        existing.title = title
+        existing.message = message
+        existing.dismissed_reason = None
+
+    return True
+
+
+def generate_all_reminders(db: Session) -> int:
+    today = date.today()
+    generated_or_updated = 0
+
+    deliverables = list(db.scalars(select(Deliverable)).all())
+    tasks = list(db.scalars(select(Task)).all())
+    subtasks = list(db.scalars(select(Subtask)).all())
+
+    for deliverable in deliverables:
+        if create_or_update_due_reminder(db, parent_type="deliverable", item=deliverable, today=today):
+            generated_or_updated += 1
+
+    for task in tasks:
+        if create_or_update_due_reminder(db, parent_type="task", item=task, today=today):
+            generated_or_updated += 1
+
+    for subtask in subtasks:
+        if create_or_update_due_reminder(db, parent_type="subtask", item=subtask, today=today):
+            generated_or_updated += 1
+
+    return generated_or_updated
+
+
+def count_active_reminders(db: Session, reminder_type: str | None = None) -> int:
+    today = date.today()
+
+    statement = select(func.count()).select_from(Reminder).where(
+        Reminder.is_active.is_(True),
+        (Reminder.snoozed_until.is_(None)) | (Reminder.snoozed_until <= today),
+    )
+
+    if reminder_type is not None:
+        statement = statement.where(Reminder.reminder_type == reminder_type)
+
+    return db.scalar(statement) or 0
+
+
 @app.get("/api/dashboard/summary", response_model=DashboardSummary)
 def dashboard_summary(db: Annotated[Session, Depends(get_db)]) -> DashboardSummary:
+    generate_all_reminders(db)
+    db.commit()
+
     return DashboardSummary(
         engagements=db.scalar(select(func.count()).select_from(Engagement)) or 0,
         workstreams=db.scalar(select(func.count()).select_from(Workstream)) or 0,
         deliverables=db.scalar(select(func.count()).select_from(Deliverable)) or 0,
         tasks=db.scalar(select(func.count()).select_from(Task)) or 0,
         subtasks=db.scalar(select(func.count()).select_from(Subtask)) or 0,
+        active_reminders=count_active_reminders(db),
+        overdue_reminders=count_active_reminders(db, "overdue"),
+        due_today_reminders=count_active_reminders(db, "due_today"),
+        due_soon_reminders=count_active_reminders(db, "due_soon"),
     )
+
+
+@app.post("/api/reminders/generate", response_model=ReminderGenerateResponse)
+def generate_reminders(db: Annotated[Session, Depends(get_db)]) -> ReminderGenerateResponse:
+    generated_or_updated = generate_all_reminders(db)
+    db.commit()
+
+    return ReminderGenerateResponse(
+        generated_or_updated=generated_or_updated,
+        active_reminders=count_active_reminders(db),
+    )
+
+
+@app.get("/api/reminders/active", response_model=list[ReminderRead])
+def list_active_reminders(
+    db: Annotated[Session, Depends(get_db)],
+    include_snoozed: bool = Query(default=False),
+) -> list[Reminder]:
+    generate_all_reminders(db)
+    db.commit()
+
+    today = date.today()
+
+    statement = select(Reminder).where(Reminder.is_active.is_(True))
+
+    if not include_snoozed:
+        statement = statement.where(
+            (Reminder.snoozed_until.is_(None)) | (Reminder.snoozed_until <= today)
+        )
+
+    statement = statement.order_by(
+        Reminder.effective_due_date.asc().nullslast(),
+        Reminder.severity.desc(),
+        Reminder.updated_at.desc(),
+    )
+
+    return list(db.scalars(statement).all())
+
+
+@app.post("/api/reminders/{reminder_id}/snooze", response_model=ReminderRead)
+def snooze_reminder(
+    reminder_id: uuid.UUID,
+    payload: ReminderSnoozeRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> Reminder:
+    reminder = db.get(Reminder, reminder_id)
+
+    if reminder is None:
+        raise HTTPException(status_code=404, detail="Reminder not found")
+
+    reminder.snoozed_until = payload.snoozed_until
+    db.commit()
+    db.refresh(reminder)
+    return reminder
 
 
 @app.get("/api/date-revision-history", response_model=list[DateRevisionHistoryRead])
@@ -417,6 +645,7 @@ def create_deliverable(payload: DeliverableCreate, db: Annotated[Session, Depend
     db.commit()
     db.refresh(item)
     recalculate_from_deliverable(db, item)
+    create_or_update_due_reminder(db, parent_type="deliverable", item=item, today=date.today())
     db.commit()
     db.refresh(item)
     return item
@@ -465,6 +694,7 @@ def update_deliverable(
     )
     validate_completion_rules(db, item, "deliverable")
     recalculate_from_deliverable(db, item)
+    create_or_update_due_reminder(db, parent_type="deliverable", item=item, today=date.today())
 
     db.commit()
     db.refresh(item)
@@ -481,6 +711,7 @@ def create_task(payload: TaskCreate, db: Annotated[Session, Depends(get_db)]) ->
     db.commit()
     db.refresh(item)
     recalculate_from_task(db, item)
+    create_or_update_due_reminder(db, parent_type="task", item=item, today=date.today())
     db.commit()
     db.refresh(item)
     return item
@@ -525,6 +756,7 @@ def update_task(
     )
     validate_completion_rules(db, item, "task")
     recalculate_from_task(db, item)
+    create_or_update_due_reminder(db, parent_type="task", item=item, today=date.today())
 
     db.commit()
     db.refresh(item)
@@ -541,6 +773,7 @@ def create_subtask(payload: SubtaskCreate, db: Annotated[Session, Depends(get_db
     db.commit()
     db.refresh(item)
     recalculate_from_subtask(db, item)
+    create_or_update_due_reminder(db, parent_type="subtask", item=item, today=date.today())
     db.commit()
     db.refresh(item)
     return item
@@ -584,6 +817,7 @@ def update_subtask(
         revised_date_field="revised_completion_date",
     )
     recalculate_from_subtask(db, item)
+    create_or_update_due_reminder(db, parent_type="subtask", item=item, today=date.today())
 
     db.commit()
     db.refresh(item)

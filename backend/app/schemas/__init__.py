@@ -247,9 +247,44 @@ class DateRevisionHistoryRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ReminderRead(BaseModel):
+    id: uuid.UUID
+    parent_type: str
+    parent_id: uuid.UUID
+    parent_external_id: str | None
+    parent_title: str
+    reminder_type: str
+    reminder_status: str
+    severity: str
+    reminder_date: date | None
+    effective_due_date: date | None
+    title: str
+    message: str
+    is_active: bool
+    snoozed_until: date | None
+    dismissed_reason: str | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ReminderGenerateResponse(BaseModel):
+    generated_or_updated: int
+    active_reminders: int
+
+
+class ReminderSnoozeRequest(BaseModel):
+    snoozed_until: OptionalDate
+
+
 class DashboardSummary(BaseModel):
     engagements: int
     workstreams: int
     deliverables: int
     tasks: int
     subtasks: int
+    active_reminders: int = 0
+    overdue_reminders: int = 0
+    due_today_reminders: int = 0
+    due_soon_reminders: int = 0
