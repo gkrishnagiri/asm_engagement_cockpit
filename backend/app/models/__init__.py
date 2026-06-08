@@ -2,6 +2,7 @@ import uuid
 from datetime import date, datetime
 
 from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, Text, func
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -167,3 +168,20 @@ class Subtask(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     task: Mapped["Task"] = relationship(back_populates="subtasks")
+
+
+class DateRevisionHistory(Base):
+    __tablename__ = "date_revision_history"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+
+    parent_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    parent_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+
+    original_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    previous_revised_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    new_revised_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="No reason provided")
+    revised_by: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    revised_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
