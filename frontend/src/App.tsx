@@ -6,6 +6,8 @@ import {
   getAnalysisOutputs,
   getDashboardSummary,
   getDataPoints,
+  getDeliverableReviewActionItems,
+  getDeliverableReviewWorkflows,
   getDeliverableReviews,
   getDeliverables,
   getEngagements,
@@ -25,6 +27,7 @@ import { Mvp7FileUploadPanel } from "./Mvp7FileUploadPanel";
 import { Mvp8LlmPanel } from "./Mvp8LlmPanel";
 import { Mvp9ReportsPanel } from "./Mvp9ReportsPanel";
 import { Mvp10TimesheetPanel } from "./Mvp10TimesheetPanel";
+import { Mvp11ReviewWorkflowPanel } from "./Mvp11ReviewWorkflowPanel";
 
 function StatusBadge({ status }: { status: string }) {
   return <span className="status-badge">{status}</span>;
@@ -101,6 +104,14 @@ function App() {
     queryKey: ["deliverable-reviews"],
     queryFn: getDeliverableReviews,
   });
+  const reviewWorkflowsQuery = useQuery({
+    queryKey: ["deliverable-review-workflows"],
+    queryFn: getDeliverableReviewWorkflows,
+  });
+  const reviewActionItemsQuery = useQuery({
+    queryKey: ["deliverable-review-action-items"],
+    queryFn: getDeliverableReviewActionItems,
+  });
   const timesheetsQuery = useQuery({ queryKey: ["timesheets"], queryFn: getTimesheets });
   const timesheetSummariesQuery = useQuery({
     queryKey: ["timesheet-summaries"],
@@ -122,10 +133,13 @@ function App() {
   const workstreams = workstreamsQuery.data ?? [];
   const llmRecommendations = llmRecommendationsQuery.data ?? [];
   const deliverableReviews = deliverableReviewsQuery.data ?? [];
+  const reviewWorkflows = reviewWorkflowsQuery.data ?? [];
+  const reviewActionItems = reviewActionItemsQuery.data ?? [];
   const timesheets = timesheetsQuery.data ?? [];
   const timesheetSummaries = timesheetSummariesQuery.data ?? [];
 
   const totalTimesheetHours = timesheets.reduce((sum, item) => sum + item.effort_hours, 0);
+  const openReviewActions = reviewActionItems.filter((item) => item.status.toLowerCase() !== "completed");
 
   return (
     <div className="app-shell">
@@ -156,6 +170,7 @@ function App() {
           <a href="#llm-recommendations">LLM Recommendations</a>
           <a href="#reports-exports">Reports & Exports</a>
           <a href="#timesheets">Timesheets</a>
+          <a href="#review-workflow">Review Workflow</a>
           <a href="#future">Future MVPs</a>
         </nav>
       </aside>
@@ -163,11 +178,11 @@ function App() {
       <main className="main">
         <section id="dashboard" className="hero-card">
           <div>
-            <p className="eyebrow">MVP 10 Daily Timesheets and LLM Summaries</p>
-            <h2>Daily timesheet tracking and accomplishment summaries are now available.</h2>
+            <p className="eyebrow">MVP 11 Deliverable Review Workflow</p>
+            <h2>Formal review workflow and approval lifecycle are now available.</h2>
             <p>
-              The cockpit now supports daily effort capture, work item linkage, weekly submission,
-              and OpenAI-traced accomplishment summaries by day, week, or custom date range.
+              The cockpit now supports submitting deliverables for review, recording
+              approval or rework decisions, and tracking review action items to closure.
             </p>
           </div>
           <div className="health-panel">
@@ -194,6 +209,8 @@ function App() {
           <div className="summary-card llm-card"><span>Deliverable Reviews</span><strong>{deliverableReviews.length}</strong></div>
           <div className="summary-card timesheet-summary-card"><span>Timesheet Entries</span><strong>{timesheets.length}</strong></div>
           <div className="summary-card timesheet-summary-card"><span>Timesheet Hours</span><strong>{totalTimesheetHours.toFixed(1)}</strong></div>
+          <div className="summary-card review-summary-card"><span>Review Workflows</span><strong>{reviewWorkflows.length}</strong></div>
+          <div className="summary-card review-summary-card"><span>Open Review Actions</span><strong>{openReviewActions.length}</strong></div>
         </section>
 
         <section id="reminders" className="content-section">
@@ -287,15 +304,16 @@ function App() {
               <p className="empty-state">No deliverables yet.</p>
             ) : (
               <table>
-                <thead><tr><th>External ID</th><th>Name</th><th>Status</th><th>Target Date</th><th>Revised Date</th></tr></thead>
+                <thead><tr><th>External ID</th><th>Name</th><th>Status</th><th>Review Status</th><th>Target Date</th><th>Approval Date</th></tr></thead>
                 <tbody>
                   {deliverables.map((item) => (
                     <tr key={item.id}>
                       <td>{item.external_id ?? "-"}</td>
                       <td>{item.name}</td>
                       <td><StatusBadge status={item.status} /></td>
+                      <td>{item.review_status ?? "-"}</td>
                       <td>{formatDate(item.target_completion_date)}</td>
-                      <td>{formatDate(item.revised_completion_date)}</td>
+                      <td>{formatDate(item.approval_date)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -537,13 +555,19 @@ function App() {
           timesheetSummaries={timesheetSummaries}
         />
 
+        <Mvp11ReviewWorkflowPanel
+          deliverables={deliverables}
+          reviewWorkflows={reviewWorkflows}
+          reviewActionItems={reviewActionItems}
+        />
+
         <section id="future" className="content-section">
           <h2>Future MVPs</h2>
           <div className="future-grid">
-            <div>Deliverable review workflow</div>
             <div>Advanced LLM recommendation management</div>
             <div>Role-based views and filters</div>
             <div>Production hardening and authentication</div>
+            <div>Audit, notifications, and collaboration workflow</div>
           </div>
         </section>
       </main>

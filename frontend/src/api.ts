@@ -4,6 +4,8 @@ import type {
   DataPoint,
   Deliverable,
   DeliverableReview,
+  DeliverableReviewActionItem,
+  DeliverableReviewWorkflow,
   Engagement,
   EvidenceItem,
   Finding,
@@ -35,6 +37,23 @@ async function getJson<T>(path: string): Promise<T> {
 async function postJson<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`API request failed: ${response.status} ${response.statusText}. ${errorText}`);
+  }
+
+  return response.json() as Promise<T>;
+}
+
+async function putJson<T>(path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "PUT",
     headers: {
       "Content-Type": "application/json",
     },
@@ -116,6 +135,14 @@ export function getLlmRecommendations(): Promise<LlmRecommendation[]> {
 
 export function getDeliverableReviews(): Promise<DeliverableReview[]> {
   return getJson<DeliverableReview[]>("/deliverable-reviews");
+}
+
+export function getDeliverableReviewWorkflows(): Promise<DeliverableReviewWorkflow[]> {
+  return getJson<DeliverableReviewWorkflow[]>("/deliverable-review-workflows");
+}
+
+export function getDeliverableReviewActionItems(): Promise<DeliverableReviewActionItem[]> {
+  return getJson<DeliverableReviewActionItem[]>("/deliverable-review-action-items");
 }
 
 export function getTimesheets(): Promise<TimesheetEntry[]> {
@@ -262,4 +289,76 @@ export function generateTimesheetSummary(payload: {
   created_by: string;
 }): Promise<TimesheetSummary> {
   return postJson<TimesheetSummary>("/timesheets/generate-summary", payload);
+}
+
+export function createDeliverableReviewWorkflow(payload: {
+  deliverable_id: string;
+  workflow_title: string;
+  workflow_status: string;
+  review_type: string;
+  submitted_by?: string | null;
+  reviewer_name?: string | null;
+  reviewer_role?: string | null;
+  review_due_date?: string | null;
+  review_notes?: string | null;
+  created_by?: string | null;
+}): Promise<DeliverableReviewWorkflow> {
+  return postJson<DeliverableReviewWorkflow>("/deliverable-review-workflows", payload);
+}
+
+export function recordDeliverableReviewDecision(payload: {
+  workflow_id: string;
+  decision: string;
+  decision_by: string;
+  approval_notes?: string | null;
+  rework_notes?: string | null;
+  review_notes?: string | null;
+}): Promise<DeliverableReviewWorkflow> {
+  return postJson<DeliverableReviewWorkflow>(
+    `/deliverable-review-workflows/${payload.workflow_id}/decision`,
+    {
+      decision: payload.decision,
+      decision_by: payload.decision_by,
+      approval_notes: payload.approval_notes,
+      rework_notes: payload.rework_notes,
+      review_notes: payload.review_notes,
+    },
+  );
+}
+
+export function createDeliverableReviewActionItem(payload: {
+  review_workflow_id: string;
+  action_title: string;
+  action_description?: string | null;
+  owner_name?: string | null;
+  priority?: string | null;
+  status: string;
+  due_date?: string | null;
+  created_by?: string | null;
+}): Promise<DeliverableReviewActionItem> {
+  return postJson<DeliverableReviewActionItem>("/deliverable-review-action-items", payload);
+}
+
+export function updateDeliverableReviewActionItem(payload: {
+  action_item_id: string;
+  action_title?: string | null;
+  action_description?: string | null;
+  owner_name?: string | null;
+  priority?: string | null;
+  status?: string | null;
+  due_date?: string | null;
+  completion_notes?: string | null;
+}): Promise<DeliverableReviewActionItem> {
+  return putJson<DeliverableReviewActionItem>(
+    `/deliverable-review-action-items/${payload.action_item_id}`,
+    {
+      action_title: payload.action_title,
+      action_description: payload.action_description,
+      owner_name: payload.owner_name,
+      priority: payload.priority,
+      status: payload.status,
+      due_date: payload.due_date,
+      completion_notes: payload.completion_notes,
+    },
+  );
 }

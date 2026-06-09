@@ -261,6 +261,46 @@ export type DeliverableReview = {
   updated_at: string;
 };
 
+export type DeliverableReviewWorkflow = {
+  id: string;
+  deliverable_id: string;
+  workflow_title: string;
+  workflow_status: string;
+  review_type: string;
+  submitted_by: string | null;
+  submitted_at: string | null;
+  reviewer_name: string | null;
+  reviewer_role: string | null;
+  review_due_date: string | null;
+  review_decision: string | null;
+  decision_by: string | null;
+  decision_at: string | null;
+  review_notes: string | null;
+  approval_notes: string | null;
+  rework_notes: string | null;
+  is_current: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DeliverableReviewActionItem = {
+  id: string;
+  review_workflow_id: string;
+  deliverable_id: string;
+  action_title: string;
+  action_description: string | null;
+  owner_name: string | null;
+  priority: string | null;
+  status: string;
+  due_date: string | null;
+  completed_at: string | null;
+  completion_notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type TimesheetEntry = {
   id: string;
   entry_date: string;

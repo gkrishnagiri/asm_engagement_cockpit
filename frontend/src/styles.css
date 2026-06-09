@@ -690,3 +690,7 @@ tr:last-child td {
     margin-top: 14px;
   }
 }
+
+.review-summary-card {
+  border-left: 6px solid #be123c;
+}
