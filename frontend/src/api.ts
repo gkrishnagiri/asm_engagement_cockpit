@@ -12,6 +12,7 @@ import type {
   Task,
   TextRefinementRequest,
   TextRefinementResponse,
+  UploadedFile,
   Workstream,
 } from "./types";
 
@@ -34,6 +35,19 @@ async function postJson<T>(path: string, body?: unknown): Promise<T> {
       "Content-Type": "application/json",
     },
     body: body === undefined ? undefined : JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+  }
+
+  return response.json() as Promise<T>;
+}
+
+async function postFormData<T>(path: string, formData: FormData): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    body: formData,
   });
 
   if (!response.ok) {
@@ -87,6 +101,14 @@ export function getEvidenceItems(): Promise<EvidenceItem[]> {
   return getJson<EvidenceItem[]>("/evidence-items");
 }
 
+export function getUploadedFiles(): Promise<UploadedFile[]> {
+  return getJson<UploadedFile[]>("/uploaded-files");
+}
+
+export function getUploadedFileDownloadUrl(uploadedFileId: string): string {
+  return `${API_BASE_URL}/uploaded-files/${uploadedFileId}/download`;
+}
+
 export function getActiveReminders(): Promise<Reminder[]> {
   return getJson<Reminder[]>("/reminders/active");
 }
@@ -128,4 +150,59 @@ export function createAnalysisOutput(payload: {
   confidence_level?: string | null;
 }): Promise<AnalysisOutput> {
   return postJson<AnalysisOutput>("/analysis-outputs", payload);
+}
+
+export function uploadFile(payload: {
+  file: File;
+  description?: string;
+  upload_category?: string;
+  subtask_id?: string;
+  data_point_id?: string;
+  stakeholder_question_id?: string;
+  finding_id?: string;
+  analysis_output_id?: string;
+  evidence_item_id?: string;
+  uploaded_by?: string;
+}): Promise<UploadedFile> {
+  const formData = new FormData();
+
+  formData.append("file", payload.file);
+
+  if (payload.description) {
+    formData.append("description", payload.description);
+  }
+
+  if (payload.upload_category) {
+    formData.append("upload_category", payload.upload_category);
+  }
+
+  if (payload.subtask_id) {
+    formData.append("subtask_id", payload.subtask_id);
+  }
+
+  if (payload.data_point_id) {
+    formData.append("data_point_id", payload.data_point_id);
+  }
+
+  if (payload.stakeholder_question_id) {
+    formData.append("stakeholder_question_id", payload.stakeholder_question_id);
+  }
+
+  if (payload.finding_id) {
+    formData.append("finding_id", payload.finding_id);
+  }
+
+  if (payload.analysis_output_id) {
+    formData.append("analysis_output_id", payload.analysis_output_id);
+  }
+
+  if (payload.evidence_item_id) {
+    formData.append("evidence_item_id", payload.evidence_item_id);
+  }
+
+  if (payload.uploaded_by) {
+    formData.append("uploaded_by", payload.uploaded_by);
+  }
+
+  return postFormData<UploadedFile>("/uploaded-files", formData);
 }

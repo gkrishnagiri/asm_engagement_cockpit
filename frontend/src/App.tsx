@@ -13,9 +13,11 @@ import {
   getStakeholderQuestions,
   getSubtasks,
   getTasks,
+  getUploadedFiles,
   getWorkstreams,
 } from "./api";
 import { Mvp6CaptureWorkspace } from "./Mvp6CaptureWorkspace";
+import { Mvp7FileUploadPanel } from "./Mvp7FileUploadPanel";
 
 function StatusBadge({ status }: { status: string }) {
   return <span className="status-badge">{status}</span>;
@@ -117,12 +119,20 @@ function App() {
     queryFn: getEvidenceItems,
   });
 
+  const uploadedFilesQuery = useQuery({
+    queryKey: ["uploaded-files"],
+    queryFn: getUploadedFiles,
+  });
+
   const summary = summaryQuery.data;
   const reminders = remindersQuery.data ?? [];
   const findings = findingsQuery.data ?? [];
   const analysisOutputs = analysisOutputsQuery.data ?? [];
   const evidenceItems = evidenceItemsQuery.data ?? [];
   const subtasks = subtasksQuery.data ?? [];
+  const dataPoints = dataPointsQuery.data ?? [];
+  const stakeholderQuestions = stakeholderQuestionsQuery.data ?? [];
+  const uploadedFiles = uploadedFilesQuery.data ?? [];
 
   return (
     <div className="app-shell">
@@ -149,6 +159,7 @@ function App() {
           <a href="#analysis-outputs">Analysis Outputs</a>
           <a href="#evidence-items">Evidence</a>
           <a href="#dictation-refinement">Dictation & Refinement</a>
+          <a href="#file-upload">File Upload</a>
           <a href="#future">Future MVPs</a>
         </nav>
       </aside>
@@ -156,12 +167,12 @@ function App() {
       <main className="main">
         <section id="dashboard" className="hero-card">
           <div>
-            <p className="eyebrow">MVP 6 Dictation and Refinement</p>
-            <h2>Dictation-assisted findings and analysis capture is now available.</h2>
+            <p className="eyebrow">MVP 7 File Upload and Evidence Attachments</p>
+            <h2>Files can now be uploaded and linked to consulting work items.</h2>
             <p>
-              The cockpit now supports microphone dictation, editable refinement output,
-              append and replace behavior, and saving refined content as findings or
-              analysis outputs.
+              The cockpit now supports local file uploads, file metadata tracking,
+              download links, and attachment linkage to sub-tasks, data points,
+              stakeholder questions, findings, analysis outputs, and evidence items.
             </p>
           </div>
           <div className="health-panel">
@@ -214,9 +225,9 @@ function App() {
             <span>Evidence Items</span>
             <strong>{evidenceItems.length}</strong>
           </div>
-          <div className="summary-card reminder-summary">
-            <span>Active Reminders</span>
-            <strong>{summary?.active_reminders ?? 0}</strong>
+          <div className="summary-card file-card">
+            <span>Uploaded Files</span>
+            <strong>{uploadedFiles.length}</strong>
           </div>
         </section>
 
@@ -400,7 +411,7 @@ function App() {
         <section id="subtasks" className="content-section">
           <h2>Sub-tasks</h2>
           <div className="table-card">
-            {(subtasksQuery.data ?? []).length === 0 ? (
+            {subtasks.length === 0 ? (
               <p className="empty-state">No sub-tasks yet.</p>
             ) : (
               <table>
@@ -436,7 +447,7 @@ function App() {
         <section id="data-points" className="content-section">
           <h2>Data Points</h2>
           <div className="table-card wide-table">
-            {(dataPointsQuery.data ?? []).length === 0 ? (
+            {dataPoints.length === 0 ? (
               <p className="empty-state">No data points yet.</p>
             ) : (
               <table>
@@ -451,7 +462,7 @@ function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(dataPointsQuery.data ?? []).map((item) => (
+                  {dataPoints.map((item) => (
                     <tr key={item.id}>
                       <td>
                         <strong>{item.topic}</strong>
@@ -475,7 +486,7 @@ function App() {
         <section id="stakeholder-questions" className="content-section">
           <h2>Stakeholder Questions</h2>
           <div className="table-card wide-table">
-            {(stakeholderQuestionsQuery.data ?? []).length === 0 ? (
+            {stakeholderQuestions.length === 0 ? (
               <p className="empty-state">No stakeholder questions yet.</p>
             ) : (
               <table>
@@ -491,7 +502,7 @@ function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(stakeholderQuestionsQuery.data ?? []).map((item) => (
+                  {stakeholderQuestions.map((item) => (
                     <tr key={item.id}>
                       <td>
                         <strong>{item.question_text}</strong>
@@ -650,13 +661,23 @@ function App() {
 
         <Mvp6CaptureWorkspace subtasks={subtasks} />
 
+        <Mvp7FileUploadPanel
+          subtasks={subtasks}
+          dataPoints={dataPoints}
+          stakeholderQuestions={stakeholderQuestions}
+          findings={findings}
+          analysisOutputs={analysisOutputs}
+          evidenceItems={evidenceItems}
+          uploadedFiles={uploadedFiles}
+        />
+
         <section id="future" className="content-section">
           <h2>Future MVPs</h2>
           <div className="future-grid">
-            <div>Files, evidence uploads, and deliverable review</div>
             <div>LLM recommendations</div>
             <div>Reports and exports</div>
             <div>Daily and weekly timesheet summaries</div>
+            <div>Deliverable review workflow</div>
           </div>
         </section>
       </main>

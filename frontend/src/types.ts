@@ -195,6 +195,26 @@ export type EvidenceItem = {
   updated_at: string;
 };
 
+export type UploadedFile = {
+  id: string;
+  original_filename: string;
+  stored_filename: string;
+  storage_path: string;
+  content_type: string | null;
+  file_size_bytes: number;
+  description: string | null;
+  upload_category: string | null;
+  subtask_id: string | null;
+  data_point_id: string | null;
+  stakeholder_question_id: string | null;
+  finding_id: string | null;
+  analysis_output_id: string | null;
+  evidence_item_id: string | null;
+  uploaded_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Reminder = {
   id: string;
   parent_type: string;

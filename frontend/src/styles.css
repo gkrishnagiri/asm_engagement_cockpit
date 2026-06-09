@@ -184,6 +184,10 @@ button {
   border-left: 6px solid #7c3aed;
 }
 
+.file-card {
+  border-left: 6px solid #059669;
+}
+
 .reminder-summary {
   border-left: 6px solid #2563eb;
 }
@@ -426,7 +430,8 @@ tr:last-child td {
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
 }
 
-.capture-workspace {
+.capture-workspace,
+.file-upload-panel {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 18px;
@@ -434,14 +439,20 @@ tr:last-child td {
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
 }
 
-.capture-controls {
+.capture-controls,
+.file-upload-grid {
   display: grid;
   grid-template-columns: minmax(220px, 320px) 1fr;
   gap: 16px;
   margin-bottom: 14px;
 }
 
+.file-upload-grid {
+  grid-template-columns: repeat(2, minmax(240px, 1fr));
+}
+
 .capture-controls label,
+.file-upload-grid label,
 .text-area-label {
   display: grid;
   gap: 8px;
@@ -450,13 +461,27 @@ tr:last-child td {
   font-weight: 800;
 }
 
-.capture-controls select {
+.capture-controls select,
+.file-upload-grid select,
+.file-upload-grid input,
+.file-upload-grid textarea {
   width: 100%;
   border: 1px solid #cbd5e1;
   border-radius: 12px;
   padding: 11px 12px;
   background: #ffffff;
   color: #172033;
+}
+
+.file-upload-grid textarea {
+  min-height: 110px;
+  resize: vertical;
+  font: inherit;
+  line-height: 1.5;
+}
+
+.file-description-field {
+  grid-column: span 2;
 }
 
 .selected-context {
@@ -511,6 +536,23 @@ tr:last-child td {
   color: #172033;
 }
 
+.uploaded-files-table {
+  margin-top: 18px;
+}
+
+.download-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 @media (max-width: 1300px) {
   .data-summary-grid {
     grid-template-columns: repeat(3, minmax(130px, 1fr));
@@ -532,8 +574,13 @@ tr:last-child td {
   .data-summary-grid,
   .future-grid,
   .capture-controls,
-  .capture-grid {
+  .capture-grid,
+  .file-upload-grid {
     grid-template-columns: 1fr;
+  }
+
+  .file-description-field {
+    grid-column: span 1;
   }
 
   .hero-card,
