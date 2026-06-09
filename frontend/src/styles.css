@@ -424,7 +424,8 @@ tr:last-child td {
 
 .capture-workspace,
 .file-upload-panel,
-.llm-generator-card {
+.llm-generator-card,
+.report-section-card {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 18px;
@@ -560,19 +561,68 @@ tr:last-child td {
   gap: 18px;
 }
 
-.llm-generator-card h3 {
+.llm-generator-card h3,
+.report-section-card h3 {
   margin: 0 0 8px;
   font-size: 20px;
 }
 
-.llm-generator-card p {
+.llm-generator-card p,
+.report-section-card p {
   color: #64748b;
   line-height: 1.5;
   margin-top: 0;
 }
 
+.report-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(140px, 1fr));
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.report-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-left: 6px solid #0f766e;
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.report-card span {
+  display: block;
+  color: #64748b;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.report-card strong {
+  display: block;
+  font-size: 30px;
+  margin-bottom: 6px;
+}
+
+.report-card p {
+  margin: 0;
+  color: #475569;
+  font-size: 13px;
+}
+
+.report-section-card {
+  margin-top: 18px;
+}
+
+.export-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
 @media (max-width: 1450px) {
-  .data-summary-grid {
+  .data-summary-grid,
+  .report-summary-grid {
     grid-template-columns: repeat(4, minmax(130px, 1fr));
   }
 }
@@ -595,7 +645,9 @@ tr:last-child td {
   .capture-grid,
   .file-upload-grid,
   .llm-form-grid,
-  .llm-panel-grid {
+  .llm-panel-grid,
+  .report-summary-grid,
+  .export-grid {
     grid-template-columns: 1fr;
   }
 

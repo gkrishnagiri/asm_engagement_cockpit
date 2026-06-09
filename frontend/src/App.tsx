@@ -21,6 +21,7 @@ import {
 import { Mvp6CaptureWorkspace } from "./Mvp6CaptureWorkspace";
 import { Mvp7FileUploadPanel } from "./Mvp7FileUploadPanel";
 import { Mvp8LlmPanel } from "./Mvp8LlmPanel";
+import { Mvp9ReportsPanel } from "./Mvp9ReportsPanel";
 
 function StatusBadge({ status }: { status: string }) {
   return <span className="status-badge">{status}</span>;
@@ -109,6 +110,8 @@ function App() {
   const uploadedFiles = uploadedFilesQuery.data ?? [];
   const deliverables = deliverablesQuery.data ?? [];
   const tasks = tasksQuery.data ?? [];
+  const engagements = engagementsQuery.data ?? [];
+  const workstreams = workstreamsQuery.data ?? [];
   const llmRecommendations = llmRecommendationsQuery.data ?? [];
   const deliverableReviews = deliverableReviewsQuery.data ?? [];
 
@@ -139,6 +142,7 @@ function App() {
           <a href="#dictation-refinement">Dictation & Refinement</a>
           <a href="#file-upload">File Upload</a>
           <a href="#llm-recommendations">LLM Recommendations</a>
+          <a href="#reports-exports">Reports & Exports</a>
           <a href="#future">Future MVPs</a>
         </nav>
       </aside>
@@ -146,11 +150,12 @@ function App() {
       <main className="main">
         <section id="dashboard" className="hero-card">
           <div>
-            <p className="eyebrow">MVP 8 LLM Recommendations and Deliverable Reviews</p>
-            <h2>Traced LLM recommendations and deliverable review workflows are now available.</h2>
+            <p className="eyebrow">MVP 9 Reports and Exports</p>
+            <h2>Execution reports and CSV exports are now available.</h2>
             <p>
-              The cockpit now supports LLM-generated recommendations and deliverable reviews,
-              with backend LLM calls wrapped in OpenAI tracing workflows for monitoring.
+              The cockpit now provides report summaries and downloadable CSV exports for
+              engagement tracking, consulting outputs, LLM outputs, uploaded files, and
+              status distribution.
             </p>
           </div>
           <div className="health-panel">
@@ -218,13 +223,13 @@ function App() {
         <section id="engagements" className="content-section">
           <h2>Engagements</h2>
           <div className="table-card">
-            {(engagementsQuery.data ?? []).length === 0 ? (
+            {engagements.length === 0 ? (
               <p className="empty-state">No engagements yet.</p>
             ) : (
               <table>
                 <thead><tr><th>Name</th><th>Client</th><th>Status</th><th>Progress</th></tr></thead>
                 <tbody>
-                  {(engagementsQuery.data ?? []).map((item) => (
+                  {engagements.map((item) => (
                     <tr key={item.id}>
                       <td>{item.name}</td>
                       <td>{item.client_name ?? "-"}</td>
@@ -241,13 +246,13 @@ function App() {
         <section id="workstreams" className="content-section">
           <h2>Workstreams</h2>
           <div className="table-card">
-            {(workstreamsQuery.data ?? []).length === 0 ? (
+            {workstreams.length === 0 ? (
               <p className="empty-state">No workstreams yet.</p>
             ) : (
               <table>
                 <thead><tr><th>External ID</th><th>Name</th><th>Status</th><th>Progress</th></tr></thead>
                 <tbody>
-                  {(workstreamsQuery.data ?? []).map((item) => (
+                  {workstreams.map((item) => (
                     <tr key={item.id}>
                       <td>{item.external_id ?? "-"}</td>
                       <td>{item.name}</td>
@@ -493,13 +498,29 @@ function App() {
           deliverableReviews={deliverableReviews}
         />
 
+        <Mvp9ReportsPanel
+          engagements={engagements}
+          workstreams={workstreams}
+          deliverables={deliverables}
+          tasks={tasks}
+          subtasks={subtasks}
+          dataPoints={dataPoints}
+          stakeholderQuestions={stakeholderQuestions}
+          findings={findings}
+          analysisOutputs={analysisOutputs}
+          evidenceItems={evidenceItems}
+          uploadedFiles={uploadedFiles}
+          llmRecommendations={llmRecommendations}
+          deliverableReviews={deliverableReviews}
+        />
+
         <section id="future" className="content-section">
           <h2>Future MVPs</h2>
           <div className="future-grid">
-            <div>Reports and exports</div>
             <div>Daily and weekly timesheet summaries</div>
             <div>Deliverable review workflow</div>
             <div>Advanced LLM recommendation management</div>
+            <div>Role-based views and filters</div>
           </div>
         </section>
       </main>
