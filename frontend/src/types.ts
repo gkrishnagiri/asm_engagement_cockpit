@@ -215,6 +215,52 @@ export type UploadedFile = {
   updated_at: string;
 };
 
+export type LlmRecommendation = {
+  id: string;
+  recommendation_type: string;
+  category: string | null;
+  priority: string | null;
+  title: string;
+  recommendation_text: string;
+  rationale: string | null;
+  expected_benefit: string | null;
+  implementation_notes: string | null;
+  source_context: string | null;
+  llm_raw_output: string | null;
+  status: string;
+  model_name: string | null;
+  trace_workflow_name: string | null;
+  deliverable_id: string | null;
+  task_id: string | null;
+  subtask_id: string | null;
+  finding_id: string | null;
+  analysis_output_id: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DeliverableReview = {
+  id: string;
+  deliverable_id: string;
+  review_title: string;
+  review_type: string;
+  review_status: string;
+  review_summary: string;
+  strengths: string | null;
+  gaps: string | null;
+  risks: string | null;
+  recommended_actions: string | null;
+  readiness_assessment: string | null;
+  source_context: string | null;
+  llm_raw_output: string | null;
+  model_name: string | null;
+  trace_workflow_name: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Reminder = {
   id: string;
   parent_type: string;

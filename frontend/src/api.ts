@@ -3,9 +3,11 @@ import type {
   DashboardSummary,
   DataPoint,
   Deliverable,
+  DeliverableReview,
   Engagement,
   EvidenceItem,
   Finding,
+  LlmRecommendation,
   Reminder,
   StakeholderQuestion,
   Subtask,
@@ -38,7 +40,8 @@ async function postJson<T>(path: string, body?: unknown): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    const errorText = await response.text();
+    throw new Error(`API request failed: ${response.status} ${response.statusText}. ${errorText}`);
   }
 
   return response.json() as Promise<T>;
@@ -103,6 +106,14 @@ export function getEvidenceItems(): Promise<EvidenceItem[]> {
 
 export function getUploadedFiles(): Promise<UploadedFile[]> {
   return getJson<UploadedFile[]>("/uploaded-files");
+}
+
+export function getLlmRecommendations(): Promise<LlmRecommendation[]> {
+  return getJson<LlmRecommendation[]>("/llm-recommendations");
+}
+
+export function getDeliverableReviews(): Promise<DeliverableReview[]> {
+  return getJson<DeliverableReview[]>("/deliverable-reviews");
 }
 
 export function getUploadedFileDownloadUrl(uploadedFileId: string): string {
@@ -205,4 +216,25 @@ export function uploadFile(payload: {
   }
 
   return postFormData<UploadedFile>("/uploaded-files", formData);
+}
+
+export function generateLlmRecommendation(payload: {
+  deliverable_id?: string | null;
+  task_id?: string | null;
+  subtask_id?: string | null;
+  finding_id?: string | null;
+  analysis_output_id?: string | null;
+  recommendation_type: string;
+  focus_area: string;
+  created_by: string;
+}): Promise<LlmRecommendation> {
+  return postJson<LlmRecommendation>("/llm-recommendations/generate", payload);
+}
+
+export function generateDeliverableReview(payload: {
+  deliverable_id: string;
+  review_type: string;
+  created_by: string;
+}): Promise<DeliverableReview> {
+  return postJson<DeliverableReview>("/deliverable-reviews/generate", payload);
 }

@@ -154,7 +154,7 @@ button {
 }
 
 .data-summary-grid {
-  grid-template-columns: repeat(6, minmax(130px, 1fr));
+  grid-template-columns: repeat(7, minmax(130px, 1fr));
 }
 
 .summary-card {
@@ -188,20 +188,12 @@ button {
   border-left: 6px solid #059669;
 }
 
+.llm-card {
+  border-left: 6px solid #9333ea;
+}
+
 .reminder-summary {
   border-left: 6px solid #2563eb;
-}
-
-.overdue-card {
-  border-left-color: #dc2626;
-}
-
-.today-card {
-  border-left-color: #d97706;
-}
-
-.soon-card {
-  border-left-color: #2563eb;
 }
 
 .content-section {
@@ -431,7 +423,8 @@ tr:last-child td {
 }
 
 .capture-workspace,
-.file-upload-panel {
+.file-upload-panel,
+.llm-generator-card {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 18px;
@@ -440,19 +433,22 @@ tr:last-child td {
 }
 
 .capture-controls,
-.file-upload-grid {
+.file-upload-grid,
+.llm-form-grid {
   display: grid;
   grid-template-columns: minmax(220px, 320px) 1fr;
   gap: 16px;
   margin-bottom: 14px;
 }
 
-.file-upload-grid {
+.file-upload-grid,
+.llm-form-grid {
   grid-template-columns: repeat(2, minmax(240px, 1fr));
 }
 
 .capture-controls label,
 .file-upload-grid label,
+.llm-form-grid label,
 .text-area-label {
   display: grid;
   gap: 8px;
@@ -464,7 +460,10 @@ tr:last-child td {
 .capture-controls select,
 .file-upload-grid select,
 .file-upload-grid input,
-.file-upload-grid textarea {
+.file-upload-grid textarea,
+.llm-form-grid select,
+.llm-form-grid input,
+.llm-form-grid textarea {
   width: 100%;
   border: 1px solid #cbd5e1;
   border-radius: 12px;
@@ -473,14 +472,16 @@ tr:last-child td {
   color: #172033;
 }
 
-.file-upload-grid textarea {
+.file-upload-grid textarea,
+.llm-form-grid textarea {
   min-height: 110px;
   resize: vertical;
   font: inherit;
   line-height: 1.5;
 }
 
-.file-description-field {
+.file-description-field,
+.llm-full-width {
   grid-column: span 2;
 }
 
@@ -512,7 +513,7 @@ tr:last-child td {
   border: 1px solid #bfdbfe;
   border-radius: 14px;
   padding: 12px 14px;
-  margin-bottom: 14px;
+  margin: 16px 0;
   font-size: 14px;
   font-weight: 700;
 }
@@ -553,9 +554,26 @@ tr:last-child td {
   font-weight: 800;
 }
 
-@media (max-width: 1300px) {
+.llm-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(280px, 1fr));
+  gap: 18px;
+}
+
+.llm-generator-card h3 {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+
+.llm-generator-card p {
+  color: #64748b;
+  line-height: 1.5;
+  margin-top: 0;
+}
+
+@media (max-width: 1450px) {
   .data-summary-grid {
-    grid-template-columns: repeat(3, minmax(130px, 1fr));
+    grid-template-columns: repeat(4, minmax(130px, 1fr));
   }
 }
 
@@ -575,11 +593,14 @@ tr:last-child td {
   .future-grid,
   .capture-controls,
   .capture-grid,
-  .file-upload-grid {
+  .file-upload-grid,
+  .llm-form-grid,
+  .llm-panel-grid {
     grid-template-columns: 1fr;
   }
 
-  .file-description-field {
+  .file-description-field,
+  .llm-full-width {
     grid-column: span 1;
   }
 
