@@ -214,3 +214,18 @@ export type Reminder = {
   created_at: string;
   updated_at: string;
 };
+
+export type TextRefinementRequest = {
+  raw_text: string;
+  refinement_type: "finding" | "analysis" | "general";
+  tone: string;
+  output_format: string;
+};
+
+export type TextRefinementResponse = {
+  raw_text: string;
+  refined_text: string;
+  refinement_type: string;
+  tone: string;
+  output_format: string;
+};

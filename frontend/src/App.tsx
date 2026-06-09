@@ -15,6 +15,7 @@ import {
   getTasks,
   getWorkstreams,
 } from "./api";
+import { Mvp6CaptureWorkspace } from "./Mvp6CaptureWorkspace";
 
 function StatusBadge({ status }: { status: string }) {
   return <span className="status-badge">{status}</span>;
@@ -66,28 +67,62 @@ function App() {
     },
   });
 
-  const engagementsQuery = useQuery({ queryKey: ["engagements"], queryFn: getEngagements });
-  const workstreamsQuery = useQuery({ queryKey: ["workstreams"], queryFn: getWorkstreams });
-  const deliverablesQuery = useQuery({ queryKey: ["deliverables"], queryFn: getDeliverables });
-  const tasksQuery = useQuery({ queryKey: ["tasks"], queryFn: getTasks });
-  const subtasksQuery = useQuery({ queryKey: ["subtasks"], queryFn: getSubtasks });
-  const dataPointsQuery = useQuery({ queryKey: ["data-points"], queryFn: getDataPoints });
+  const engagementsQuery = useQuery({
+    queryKey: ["engagements"],
+    queryFn: getEngagements,
+  });
+
+  const workstreamsQuery = useQuery({
+    queryKey: ["workstreams"],
+    queryFn: getWorkstreams,
+  });
+
+  const deliverablesQuery = useQuery({
+    queryKey: ["deliverables"],
+    queryFn: getDeliverables,
+  });
+
+  const tasksQuery = useQuery({
+    queryKey: ["tasks"],
+    queryFn: getTasks,
+  });
+
+  const subtasksQuery = useQuery({
+    queryKey: ["subtasks"],
+    queryFn: getSubtasks,
+  });
+
+  const dataPointsQuery = useQuery({
+    queryKey: ["data-points"],
+    queryFn: getDataPoints,
+  });
+
   const stakeholderQuestionsQuery = useQuery({
     queryKey: ["stakeholder-questions"],
     queryFn: getStakeholderQuestions,
   });
-  const findingsQuery = useQuery({ queryKey: ["findings"], queryFn: getFindings });
+
+  const findingsQuery = useQuery({
+    queryKey: ["findings"],
+    queryFn: getFindings,
+  });
+
   const analysisOutputsQuery = useQuery({
     queryKey: ["analysis-outputs"],
     queryFn: getAnalysisOutputs,
   });
-  const evidenceItemsQuery = useQuery({ queryKey: ["evidence-items"], queryFn: getEvidenceItems });
+
+  const evidenceItemsQuery = useQuery({
+    queryKey: ["evidence-items"],
+    queryFn: getEvidenceItems,
+  });
 
   const summary = summaryQuery.data;
   const reminders = remindersQuery.data ?? [];
   const findings = findingsQuery.data ?? [];
   const analysisOutputs = analysisOutputsQuery.data ?? [];
   const evidenceItems = evidenceItemsQuery.data ?? [];
+  const subtasks = subtasksQuery.data ?? [];
 
   return (
     <div className="app-shell">
@@ -113,6 +148,7 @@ function App() {
           <a href="#findings">Findings</a>
           <a href="#analysis-outputs">Analysis Outputs</a>
           <a href="#evidence-items">Evidence</a>
+          <a href="#dictation-refinement">Dictation & Refinement</a>
           <a href="#future">Future MVPs</a>
         </nav>
       </aside>
@@ -120,11 +156,12 @@ function App() {
       <main className="main">
         <section id="dashboard" className="hero-card">
           <div>
-            <p className="eyebrow">MVP 5 Consulting Outputs</p>
-            <h2>Findings, analysis, and evidence are now visible.</h2>
+            <p className="eyebrow">MVP 6 Dictation and Refinement</p>
+            <h2>Dictation-assisted findings and analysis capture is now available.</h2>
             <p>
-              The cockpit now captures consulting findings, structured analysis outputs,
-              and evidence items that support observations and recommendations.
+              The cockpit now supports microphone dictation, editable refinement output,
+              append and replace behavior, and saving refined content as findings or
+              analysis outputs.
             </p>
           </div>
           <div className="health-panel">
@@ -187,7 +224,10 @@ function App() {
           <div className="section-header">
             <div>
               <h2>Active Reminders</h2>
-              <p>Reminders remain visible until completed, received, responded, revised, or snoozed.</p>
+              <p>
+                Reminders remain visible until completed, received, responded, revised,
+                or snoozed.
+              </p>
             </div>
             <button
               className="primary-button"
@@ -243,7 +283,9 @@ function App() {
                     <tr key={item.id}>
                       <td>{item.name}</td>
                       <td>{item.client_name ?? "-"}</td>
-                      <td><StatusBadge status={item.status} /></td>
+                      <td>
+                        <StatusBadge status={item.status} />
+                      </td>
                       <td>{item.progress_percent}%</td>
                     </tr>
                   ))}
@@ -273,7 +315,9 @@ function App() {
                     <tr key={item.id}>
                       <td>{item.external_id ?? "-"}</td>
                       <td>{item.name}</td>
-                      <td><StatusBadge status={item.status} /></td>
+                      <td>
+                        <StatusBadge status={item.status} />
+                      </td>
                       <td>{item.progress_percent}%</td>
                     </tr>
                   ))}
@@ -304,7 +348,9 @@ function App() {
                     <tr key={item.id}>
                       <td>{item.external_id ?? "-"}</td>
                       <td>{item.name}</td>
-                      <td><StatusBadge status={item.status} /></td>
+                      <td>
+                        <StatusBadge status={item.status} />
+                      </td>
                       <td>{formatDate(item.target_completion_date)}</td>
                       <td>{formatDate(item.revised_completion_date)}</td>
                     </tr>
@@ -337,7 +383,9 @@ function App() {
                     <tr key={item.id}>
                       <td>{item.external_id ?? "-"}</td>
                       <td>{item.title}</td>
-                      <td><StatusBadge status={item.status} /></td>
+                      <td>
+                        <StatusBadge status={item.status} />
+                      </td>
                       <td>{item.priority ?? "-"}</td>
                       <td>{formatDate(item.target_completion_date)}</td>
                       <td>{formatDate(item.revised_completion_date)}</td>
@@ -367,11 +415,13 @@ function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(subtasksQuery.data ?? []).map((item) => (
+                  {subtasks.map((item) => (
                     <tr key={item.id}>
                       <td>{item.external_id ?? "-"}</td>
                       <td>{item.title}</td>
-                      <td><StatusBadge status={item.status} /></td>
+                      <td>
+                        <StatusBadge status={item.status} />
+                      </td>
                       <td>{item.priority ?? "-"}</td>
                       <td>{formatDate(item.target_completion_date)}</td>
                       <td>{formatDate(item.revised_completion_date)}</td>
@@ -408,7 +458,9 @@ function App() {
                         {item.details ? <div className="small-note">{item.details}</div> : null}
                       </td>
                       <td>{item.source ?? "-"}</td>
-                      <td><StatusBadge status={item.status} /></td>
+                      <td>
+                        <StatusBadge status={item.status} />
+                      </td>
                       <td>{formatDate(item.expected_received_date)}</td>
                       <td>{formatDate(item.actual_received_date)}</td>
                       <td>{item.data_quality ?? "-"}</td>
@@ -452,7 +504,9 @@ function App() {
                         {item.stakeholder_name ?? "-"}
                         {item.stakeholder_role ? <div className="small-note">{item.stakeholder_role}</div> : null}
                       </td>
-                      <td><StatusBadge status={item.response_status} /></td>
+                      <td>
+                        <StatusBadge status={item.response_status} />
+                      </td>
                       <td>{formatDate(item.expected_response_date)}</td>
                       <td>{formatDate(item.actual_response_date)}</td>
                       <td>{yesNo(item.follow_up_required)}</td>
@@ -468,7 +522,7 @@ function App() {
           <h2>Findings</h2>
           <div className="table-card wide-table">
             {findings.length === 0 ? (
-              <p className="empty-state">No findings yet. Create findings through the API for MVP 5 validation.</p>
+              <p className="empty-state">No findings yet.</p>
             ) : (
               <table>
                 <thead>
@@ -487,12 +541,18 @@ function App() {
                       <td>
                         <strong>{item.title}</strong>
                         <div className="small-note">{item.finding_text}</div>
-                        {item.business_impact ? <div className="small-note">Impact: {item.business_impact}</div> : null}
-                        {item.recommendation ? <div className="small-note">Recommendation: {item.recommendation}</div> : null}
+                        {item.business_impact ? (
+                          <div className="small-note">Impact: {item.business_impact}</div>
+                        ) : null}
+                        {item.recommendation ? (
+                          <div className="small-note">Recommendation: {item.recommendation}</div>
+                        ) : null}
                       </td>
                       <td>{item.finding_type ?? "-"}</td>
                       <td>{item.severity ?? "-"}</td>
-                      <td><StatusBadge status={item.status} /></td>
+                      <td>
+                        <StatusBadge status={item.status} />
+                      </td>
                       <td>{item.confidence_level ?? "-"}</td>
                       <td>{yesNo(item.is_validated)}</td>
                     </tr>
@@ -507,7 +567,7 @@ function App() {
           <h2>Analysis Outputs</h2>
           <div className="table-card wide-table">
             {analysisOutputs.length === 0 ? (
-              <p className="empty-state">No analysis outputs yet. Create analysis outputs through the API for MVP 5 validation.</p>
+              <p className="empty-state">No analysis outputs yet.</p>
             ) : (
               <table>
                 <thead>
@@ -526,11 +586,17 @@ function App() {
                       <td>
                         <strong>{item.analysis_title}</strong>
                         <div className="small-note">{item.analysis_text}</div>
-                        {item.methodology ? <div className="small-note">Methodology: {item.methodology}</div> : null}
-                        {item.limitations ? <div className="small-note">Limitations: {item.limitations}</div> : null}
+                        {item.methodology ? (
+                          <div className="small-note">Methodology: {item.methodology}</div>
+                        ) : null}
+                        {item.limitations ? (
+                          <div className="small-note">Limitations: {item.limitations}</div>
+                        ) : null}
                       </td>
                       <td>{item.analysis_type ?? "-"}</td>
-                      <td><StatusBadge status={item.status} /></td>
+                      <td>
+                        <StatusBadge status={item.status} />
+                      </td>
                       <td>{item.confidence_level ?? "-"}</td>
                       <td>{item.reviewed_by ?? "-"}</td>
                       <td>{formatDate(item.reviewed_date)}</td>
@@ -546,7 +612,7 @@ function App() {
           <h2>Evidence Items</h2>
           <div className="table-card wide-table">
             {evidenceItems.length === 0 ? (
-              <p className="empty-state">No evidence items yet. Create evidence through the API for MVP 5 validation.</p>
+              <p className="empty-state">No evidence items yet.</p>
             ) : (
               <table>
                 <thead>
@@ -565,7 +631,9 @@ function App() {
                       <td>
                         <strong>{item.title}</strong>
                         {item.description ? <div className="small-note">{item.description}</div> : null}
-                        {item.source_reference ? <div className="small-note">Reference: {item.source_reference}</div> : null}
+                        {item.source_reference ? (
+                          <div className="small-note">Reference: {item.source_reference}</div>
+                        ) : null}
                       </td>
                       <td>{item.evidence_type}</td>
                       <td>{item.source_name ?? "-"}</td>
@@ -580,10 +648,11 @@ function App() {
           </div>
         </section>
 
+        <Mvp6CaptureWorkspace subtasks={subtasks} />
+
         <section id="future" className="content-section">
           <h2>Future MVPs</h2>
           <div className="future-grid">
-            <div>Dictation and LLM refinement</div>
             <div>Files, evidence uploads, and deliverable review</div>
             <div>LLM recommendations</div>
             <div>Reports and exports</div>
