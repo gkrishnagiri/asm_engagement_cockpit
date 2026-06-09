@@ -4,6 +4,8 @@ export type DashboardSummary = {
   deliverables: number;
   tasks: number;
   subtasks: number;
+  data_points: number;
+  stakeholder_questions: number;
   active_reminders: number;
   overdue_reminders: number;
   due_today_reminders: number;
@@ -92,6 +94,44 @@ export type Subtask = {
   target_completion_date: string | null;
   revised_completion_date: string | null;
   actual_completion_date: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DataPoint = {
+  id: string;
+  subtask_id: string;
+  topic: string;
+  details: string | null;
+  source: string | null;
+  requested_date: string | null;
+  expected_received_date: string | null;
+  actual_received_date: string | null;
+  status: string;
+  data_quality: string | null;
+  notes: string | null;
+  used_in_finding: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type StakeholderQuestion = {
+  id: string;
+  subtask_id: string;
+  question_text: string;
+  question_category: string | null;
+  stakeholder_name: string | null;
+  stakeholder_role: string | null;
+  stakeholder_email: string | null;
+  raised_date: string | null;
+  expected_response_date: string | null;
+  actual_response_date: string | null;
+  response_status: string;
+  response_details: string | null;
+  follow_up_required: boolean;
+  follow_up_notes: string | null;
+  confidence_level: string | null;
+  used_in_finding: boolean;
   created_at: string;
   updated_at: string;
 };

@@ -4,8 +4,10 @@ import {
   generateReminders,
   getActiveReminders,
   getDashboardSummary,
+  getDataPoints,
   getDeliverables,
   getEngagements,
+  getStakeholderQuestions,
   getSubtasks,
   getTasks,
   getWorkstreams,
@@ -20,12 +22,28 @@ function ReminderBadge({ status }: { status: string }) {
   return <span className={`reminder-badge reminder-${normalized}`}>{status}</span>;
 }
 
+function ParentTypeBadge({ parentType }: { parentType: string }) {
+  const labelMap: Record<string, string> = {
+    deliverable: "Deliverable",
+    task: "Task",
+    subtask: "Sub-task",
+    data_point: "Data Point",
+    stakeholder_question: "Stakeholder Question",
+  };
+
+  return <span className="parent-type">{labelMap[parentType] ?? parentType}</span>;
+}
+
 function formatDate(value: string | null) {
   if (!value) {
     return "-";
   }
 
   return value;
+}
+
+function yesNo(value: boolean) {
+  return value ? "Yes" : "No";
 }
 
 function App() {
@@ -74,6 +92,16 @@ function App() {
     queryFn: getSubtasks,
   });
 
+  const dataPointsQuery = useQuery({
+    queryKey: ["data-points"],
+    queryFn: getDataPoints,
+  });
+
+  const stakeholderQuestionsQuery = useQuery({
+    queryKey: ["stakeholder-questions"],
+    queryFn: getStakeholderQuestions,
+  });
+
   const summary = summaryQuery.data;
   const reminders = remindersQuery.data ?? [];
 
@@ -96,6 +124,8 @@ function App() {
           <a href="#deliverables">Deliverables</a>
           <a href="#tasks">Tasks</a>
           <a href="#subtasks">Sub-tasks</a>
+          <a href="#data-points">Data Points</a>
+          <a href="#stakeholder-questions">Stakeholder Questions</a>
           <a href="#future">Future MVPs</a>
         </nav>
       </aside>
@@ -103,11 +133,11 @@ function App() {
       <main className="main">
         <section id="dashboard" className="hero-card">
           <div>
-            <p className="eyebrow">MVP 3 Reminders</p>
-            <h2>Persistent reminders are now available.</h2>
+            <p className="eyebrow">MVP 4 Data Collection</p>
+            <h2>Data points and stakeholder questions are now tracked.</h2>
             <p>
-              The cockpit now tracks due soon, due today, and overdue reminders for
-              deliverables, tasks, and sub-tasks using the effective due date.
+              The cockpit now supports tracking required data, expected receipt dates,
+              stakeholder questions, expected response dates, and related reminders.
             </p>
           </div>
           <div className="health-panel">
@@ -139,7 +169,15 @@ function App() {
           </div>
         </section>
 
-        <section className="summary-grid reminders-summary-grid">
+        <section className="summary-grid data-summary-grid">
+          <div className="summary-card data-card">
+            <span>Data Points</span>
+            <strong>{summary?.data_points ?? 0}</strong>
+          </div>
+          <div className="summary-card data-card">
+            <span>Stakeholder Questions</span>
+            <strong>{summary?.stakeholder_questions ?? 0}</strong>
+          </div>
           <div className="summary-card reminder-summary">
             <span>Active Reminders</span>
             <strong>{summary?.active_reminders ?? 0}</strong>
@@ -163,8 +201,8 @@ function App() {
             <div>
               <h2>Active Reminders</h2>
               <p>
-                Reminders remain visible until the item is completed, date is revised,
-                or the reminder is snoozed.
+                Reminders now include deliverables, tasks, sub-tasks, data points,
+                and stakeholder responses.
               </p>
             </div>
             <button
@@ -186,13 +224,14 @@ function App() {
                 <article key={reminder.id} className={`reminder-card severity-${reminder.severity}`}>
                   <div className="reminder-card-header">
                     <ReminderBadge status={reminder.reminder_status} />
-                    <span className="parent-type">{reminder.parent_type}</span>
+                    <ParentTypeBadge parentType={reminder.parent_type} />
                   </div>
                   <h3>{reminder.title}</h3>
                   <p>{reminder.message}</p>
                   <div className="reminder-meta">
                     <span>Due: {formatDate(reminder.effective_due_date)}</span>
                     <span>Severity: {reminder.severity}</span>
+                    <span>Reminder Type: {reminder.reminder_type}</span>
                   </div>
                 </article>
               ))
@@ -330,7 +369,7 @@ function App() {
           <h2>Sub-tasks</h2>
           <div className="table-card">
             {(subtasksQuery.data ?? []).length === 0 ? (
-              <p className="empty-state">No sub-tasks yet. You will create these through the UI in later MVPs.</p>
+              <p className="empty-state">No sub-tasks yet. Data points and stakeholder questions are linked to sub-tasks.</p>
             ) : (
               <table>
                 <thead>
@@ -360,13 +399,103 @@ function App() {
           </div>
         </section>
 
+        <section id="data-points" className="content-section">
+          <h2>Data Points</h2>
+          <div className="table-card wide-table">
+            {(dataPointsQuery.data ?? []).length === 0 ? (
+              <p className="empty-state">No data points yet. Create data points through the API for MVP 4 validation.</p>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Topic</th>
+                    <th>Source</th>
+                    <th>Status</th>
+                    <th>Requested</th>
+                    <th>Expected</th>
+                    <th>Received</th>
+                    <th>Quality</th>
+                    <th>Used in Finding</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(dataPointsQuery.data ?? []).map((item) => (
+                    <tr key={item.id}>
+                      <td>
+                        <strong>{item.topic}</strong>
+                        {item.details ? <div className="small-note">{item.details}</div> : null}
+                      </td>
+                      <td>{item.source ?? "-"}</td>
+                      <td><StatusBadge status={item.status} /></td>
+                      <td>{formatDate(item.requested_date)}</td>
+                      <td>{formatDate(item.expected_received_date)}</td>
+                      <td>{formatDate(item.actual_received_date)}</td>
+                      <td>{item.data_quality ?? "-"}</td>
+                      <td>{yesNo(item.used_in_finding)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </section>
+
+        <section id="stakeholder-questions" className="content-section">
+          <h2>Stakeholder Questions</h2>
+          <div className="table-card wide-table">
+            {(stakeholderQuestionsQuery.data ?? []).length === 0 ? (
+              <p className="empty-state">No stakeholder questions yet. Create stakeholder questions through the API for MVP 4 validation.</p>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Question</th>
+                    <th>Category</th>
+                    <th>Stakeholder</th>
+                    <th>Status</th>
+                    <th>Raised</th>
+                    <th>Expected</th>
+                    <th>Responded</th>
+                    <th>Follow-up</th>
+                    <th>Confidence</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(stakeholderQuestionsQuery.data ?? []).map((item) => (
+                    <tr key={item.id}>
+                      <td>
+                        <strong>{item.question_text}</strong>
+                        {item.response_details ? (
+                          <div className="small-note">Response: {item.response_details}</div>
+                        ) : null}
+                      </td>
+                      <td>{item.question_category ?? "-"}</td>
+                      <td>
+                        {item.stakeholder_name ?? "-"}
+                        {item.stakeholder_role ? <div className="small-note">{item.stakeholder_role}</div> : null}
+                        {item.stakeholder_email ? <div className="small-note">{item.stakeholder_email}</div> : null}
+                      </td>
+                      <td><StatusBadge status={item.response_status} /></td>
+                      <td>{formatDate(item.raised_date)}</td>
+                      <td>{formatDate(item.expected_response_date)}</td>
+                      <td>{formatDate(item.actual_response_date)}</td>
+                      <td>{yesNo(item.follow_up_required)}</td>
+                      <td>{item.confidence_level ?? "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </section>
+
         <section id="future" className="content-section">
           <h2>Future MVPs</h2>
           <div className="future-grid">
-            <div>Data points and stakeholder responses</div>
             <div>Findings and analysis</div>
             <div>Dictation and LLM refinement</div>
             <div>Files, evidence, and deliverable review</div>
+            <div>LLM recommendations</div>
             <div>Reports and exports</div>
             <div>Daily and weekly timesheet summaries</div>
           </div>

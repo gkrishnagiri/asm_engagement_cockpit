@@ -38,6 +38,7 @@ button {
   position: sticky;
   top: 0;
   height: 100vh;
+  overflow-y: auto;
 }
 
 .brand {
@@ -152,8 +153,8 @@ button {
   margin: 24px 0;
 }
 
-.reminders-summary-grid {
-  grid-template-columns: repeat(4, minmax(150px, 1fr));
+.data-summary-grid {
+  grid-template-columns: repeat(6, minmax(130px, 1fr));
 }
 
 .summary-card {
@@ -173,6 +174,10 @@ button {
 
 .summary-card strong {
   font-size: 32px;
+}
+
+.data-card {
+  border-left: 6px solid #0891b2;
 }
 
 .reminder-summary {
@@ -233,12 +238,17 @@ button {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 18px;
-  overflow: hidden;
+  overflow: auto;
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.wide-table {
+  max-width: 100%;
 }
 
 table {
   width: 100%;
+  min-width: 900px;
   border-collapse: collapse;
 }
 
@@ -249,12 +259,14 @@ th {
   text-align: left;
   padding: 14px 16px;
   border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
 }
 
 td {
   padding: 14px 16px;
   border-bottom: 1px solid #f1f5f9;
   font-size: 14px;
+  vertical-align: top;
 }
 
 tr:last-child td {
@@ -270,6 +282,7 @@ tr:last-child td {
   color: #1d4ed8;
   font-size: 12px;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .empty-state {
@@ -364,9 +377,19 @@ tr:last-child td {
 .parent-type {
   text-transform: uppercase;
   color: #64748b;
+  background: #f1f5f9;
+  border-radius: 999px;
+  padding: 5px 10px;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
+}
+
+.small-note {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
+  margin-top: 5px;
 }
 
 .future-grid {
@@ -384,6 +407,12 @@ tr:last-child td {
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
 }
 
+@media (max-width: 1300px) {
+  .data-summary-grid {
+    grid-template-columns: repeat(3, minmax(130px, 1fr));
+  }
+}
+
 @media (max-width: 1100px) {
   .app-shell {
     display: block;
@@ -396,7 +425,7 @@ tr:last-child td {
   }
 
   .summary-grid,
-  .reminders-summary-grid,
+  .data-summary-grid,
   .future-grid {
     grid-template-columns: repeat(2, minmax(120px, 1fr));
   }

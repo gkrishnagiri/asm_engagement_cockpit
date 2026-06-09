@@ -1,8 +1,10 @@
 import type {
   DashboardSummary,
+  DataPoint,
   Deliverable,
   Engagement,
   Reminder,
+  StakeholderQuestion,
   Subtask,
   Task,
   Workstream,
@@ -58,6 +60,14 @@ export function getTasks(): Promise<Task[]> {
 
 export function getSubtasks(): Promise<Subtask[]> {
   return getJson<Subtask[]>("/subtasks");
+}
+
+export function getDataPoints(): Promise<DataPoint[]> {
+  return getJson<DataPoint[]>("/data-points");
+}
+
+export function getStakeholderQuestions(): Promise<StakeholderQuestion[]> {
+  return getJson<StakeholderQuestion[]>("/stakeholder-questions");
 }
 
 export function getActiveReminders(): Promise<Reminder[]> {
