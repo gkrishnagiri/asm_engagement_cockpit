@@ -233,6 +233,92 @@ class SubtaskRead(SubtaskBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class DataPointBase(BaseModel):
+    subtask_id: uuid.UUID
+    topic: str
+    details: str | None = None
+    source: str | None = None
+    requested_date: OptionalDate = None
+    expected_received_date: OptionalDate = None
+    actual_received_date: OptionalDate = None
+    status: str = "Needed"
+    data_quality: str | None = None
+    notes: str | None = None
+    used_in_finding: bool = False
+
+
+class DataPointCreate(DataPointBase):
+    pass
+
+
+class DataPointUpdate(BaseModel):
+    topic: str | None = None
+    details: str | None = None
+    source: str | None = None
+    requested_date: OptionalDate = None
+    expected_received_date: OptionalDate = None
+    actual_received_date: OptionalDate = None
+    status: str | None = None
+    data_quality: str | None = None
+    notes: str | None = None
+    used_in_finding: bool | None = None
+
+
+class DataPointRead(DataPointBase):
+    id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class StakeholderQuestionBase(BaseModel):
+    subtask_id: uuid.UUID
+    question_text: str
+    question_category: str | None = None
+    stakeholder_name: str | None = None
+    stakeholder_role: str | None = None
+    stakeholder_email: str | None = None
+    raised_date: OptionalDate = None
+    expected_response_date: OptionalDate = None
+    actual_response_date: OptionalDate = None
+    response_status: str = "Draft"
+    response_details: str | None = None
+    follow_up_required: bool = False
+    follow_up_notes: str | None = None
+    confidence_level: str | None = None
+    used_in_finding: bool = False
+
+
+class StakeholderQuestionCreate(StakeholderQuestionBase):
+    pass
+
+
+class StakeholderQuestionUpdate(BaseModel):
+    question_text: str | None = None
+    question_category: str | None = None
+    stakeholder_name: str | None = None
+    stakeholder_role: str | None = None
+    stakeholder_email: str | None = None
+    raised_date: OptionalDate = None
+    expected_response_date: OptionalDate = None
+    actual_response_date: OptionalDate = None
+    response_status: str | None = None
+    response_details: str | None = None
+    follow_up_required: bool | None = None
+    follow_up_notes: str | None = None
+    confidence_level: str | None = None
+    used_in_finding: bool | None = None
+
+
+class StakeholderQuestionRead(StakeholderQuestionBase):
+    id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class DateRevisionHistoryRead(BaseModel):
     id: uuid.UUID
     parent_type: str
@@ -284,6 +370,8 @@ class DashboardSummary(BaseModel):
     deliverables: int
     tasks: int
     subtasks: int
+    data_points: int = 0
+    stakeholder_questions: int = 0
     active_reminders: int = 0
     overdue_reminders: int = 0
     due_today_reminders: int = 0

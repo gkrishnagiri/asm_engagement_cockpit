@@ -168,6 +168,70 @@ class Subtask(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     task: Mapped["Task"] = relationship(back_populates="subtasks")
+    data_points: Mapped[list["DataPoint"]] = relationship(
+        back_populates="subtask",
+        cascade="all, delete-orphan",
+    )
+    stakeholder_questions: Mapped[list["StakeholderQuestion"]] = relationship(
+        back_populates="subtask",
+        cascade="all, delete-orphan",
+    )
+
+
+class DataPoint(Base):
+    __tablename__ = "data_points"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    subtask_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("subtasks.id", ondelete="CASCADE"))
+
+    topic: Mapped[str] = mapped_column(String(255), nullable=False)
+    details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    requested_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    expected_received_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    actual_received_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    status: Mapped[str] = mapped_column(String(100), default="Needed")
+    data_quality: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    used_in_finding: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    subtask: Mapped["Subtask"] = relationship(back_populates="data_points")
+
+
+class StakeholderQuestion(Base):
+    __tablename__ = "stakeholder_questions"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    subtask_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("subtasks.id", ondelete="CASCADE"))
+
+    question_text: Mapped[str] = mapped_column(Text, nullable=False)
+    question_category: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    stakeholder_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    stakeholder_role: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    stakeholder_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    raised_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    expected_response_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    actual_response_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    response_status: Mapped[str] = mapped_column(String(100), default="Draft")
+    response_details: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    follow_up_required: Mapped[bool] = mapped_column(Boolean, default=False)
+    follow_up_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    confidence_level: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    used_in_finding: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    subtask: Mapped["Subtask"] = relationship(back_populates="stakeholder_questions")
 
 
 class DateRevisionHistory(Base):

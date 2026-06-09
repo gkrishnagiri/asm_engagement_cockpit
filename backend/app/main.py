@@ -11,16 +11,21 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.database import create_database_tables, get_db
 from app.models import (
+    DataPoint,
     DateRevisionHistory,
     Deliverable,
     Engagement,
     Reminder,
+    StakeholderQuestion,
     Subtask,
     Task,
     Workstream,
 )
 from app.schemas import (
     DashboardSummary,
+    DataPointCreate,
+    DataPointRead,
+    DataPointUpdate,
     DateRevisionHistoryRead,
     DeliverableCreate,
     DeliverableRead,
@@ -32,6 +37,9 @@ from app.schemas import (
     ReminderGenerateResponse,
     ReminderRead,
     ReminderSnoozeRequest,
+    StakeholderQuestionCreate,
+    StakeholderQuestionRead,
+    StakeholderQuestionUpdate,
     SubtaskCreate,
     SubtaskRead,
     SubtaskUpdate,
@@ -47,7 +55,7 @@ settings = get_settings()
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.3.0",
+    version="0.4.0",
 )
 
 app.add_middleware(
@@ -61,6 +69,8 @@ app.add_middleware(
 
 COMPLETED_STATUS = "Completed"
 REMINDER_LOOKAHEAD_DAYS = 7
+DATA_POINT_CLOSED_STATUSES = {"received", "not available", "not applicable"}
+QUESTION_CLOSED_STATUSES = {"responded", "closed"}
 
 
 @app.on_event("startup")
@@ -79,6 +89,14 @@ def health() -> HealthResponse:
 
 def is_completed(status: str | None) -> bool:
     return (status or "").strip().lower() == COMPLETED_STATUS.lower()
+
+
+def is_data_point_closed(status: str | None) -> bool:
+    return (status or "").strip().lower() in DATA_POINT_CLOSED_STATUSES
+
+
+def is_question_closed(status: str | None) -> bool:
+    return (status or "").strip().lower() in QUESTION_CLOSED_STATUSES
 
 
 def calculate_completed_ratio(items: list[Any]) -> Decimal:
@@ -142,6 +160,12 @@ def update_model_from_payload(
         setattr(item, field_name, value)
 
 
+def update_simple_model_from_payload(item: Any, payload: Any) -> None:
+    data = payload.model_dump(exclude_unset=True)
+    for field_name, value in data.items():
+        setattr(item, field_name, value)
+
+
 def validate_completion_rules(db: Session, item: Any, item_type: str) -> None:
     if not is_completed(getattr(item, "status", None)):
         return
@@ -150,44 +174,31 @@ def validate_completion_rules(db: Session, item: Any, item_type: str) -> None:
         workstreams = list(db.scalars(select(Workstream).where(Workstream.engagement_id == item.id)).all())
         incomplete = [child for child in workstreams if not is_completed(child.status)]
         if incomplete:
-            raise HTTPException(
-                status_code=400,
-                detail="Engagement cannot be completed until all workstreams are completed.",
-            )
+            raise HTTPException(status_code=400, detail="Engagement cannot be completed until all workstreams are completed.")
 
     if item_type == "workstream":
         deliverables = list(db.scalars(select(Deliverable).where(Deliverable.workstream_id == item.id)).all())
         incomplete = [child for child in deliverables if not is_completed(child.status)]
         if incomplete:
-            raise HTTPException(
-                status_code=400,
-                detail="Workstream cannot be completed until all deliverables are completed.",
-            )
+            raise HTTPException(status_code=400, detail="Workstream cannot be completed until all deliverables are completed.")
 
     if item_type == "deliverable":
         tasks = list(db.scalars(select(Task).where(Task.deliverable_id == item.id)).all())
         incomplete = [child for child in tasks if not is_completed(child.status)]
         if incomplete:
-            raise HTTPException(
-                status_code=400,
-                detail="Deliverable cannot be completed until all tasks are completed.",
-            )
+            raise HTTPException(status_code=400, detail="Deliverable cannot be completed until all tasks are completed.")
 
     if item_type == "task":
         subtasks = list(db.scalars(select(Subtask).where(Subtask.task_id == item.id)).all())
         incomplete = [child for child in subtasks if not is_completed(child.status)]
         if incomplete:
-            raise HTTPException(
-                status_code=400,
-                detail="Task cannot be completed until all sub-tasks are completed.",
-            )
+            raise HTTPException(status_code=400, detail="Task cannot be completed until all sub-tasks are completed.")
 
 
 def recalculate_task_progress(db: Session, task_id: uuid.UUID) -> None:
     task = db.get(Task, task_id)
     if task is None:
         return
-
     subtasks = list(db.scalars(select(Subtask).where(Subtask.task_id == task.id)).all())
     task.progress_percent = calculate_completed_ratio(subtasks)
 
@@ -196,7 +207,6 @@ def recalculate_deliverable_progress(db: Session, deliverable_id: uuid.UUID) -> 
     deliverable = db.get(Deliverable, deliverable_id)
     if deliverable is None:
         return
-
     tasks = list(db.scalars(select(Task).where(Task.deliverable_id == deliverable.id)).all())
     deliverable.progress_percent = calculate_completed_ratio(tasks)
 
@@ -205,7 +215,6 @@ def recalculate_workstream_progress(db: Session, workstream_id: uuid.UUID) -> No
     workstream = db.get(Workstream, workstream_id)
     if workstream is None:
         return
-
     deliverables = list(db.scalars(select(Deliverable).where(Deliverable.workstream_id == workstream.id)).all())
     workstream.progress_percent = calculate_completed_ratio(deliverables)
 
@@ -214,7 +223,6 @@ def recalculate_engagement_progress(db: Session, engagement_id: uuid.UUID) -> No
     engagement = db.get(Engagement, engagement_id)
     if engagement is None:
         return
-
     workstreams = list(db.scalars(select(Workstream).where(Workstream.engagement_id == engagement.id)).all())
     engagement.progress_percent = calculate_completed_ratio(workstreams)
 
@@ -223,47 +231,38 @@ def recalculate_from_subtask(db: Session, subtask: Subtask) -> None:
     task = db.get(Task, subtask.task_id)
     if task is None:
         return
-
     recalculate_task_progress(db, task.id)
 
     deliverable = db.get(Deliverable, task.deliverable_id)
     if deliverable is None:
         return
-
     recalculate_deliverable_progress(db, deliverable.id)
 
     workstream = db.get(Workstream, deliverable.workstream_id)
     if workstream is None:
         return
-
     recalculate_workstream_progress(db, workstream.id)
     recalculate_engagement_progress(db, workstream.engagement_id)
 
 
 def recalculate_from_task(db: Session, task: Task) -> None:
     recalculate_task_progress(db, task.id)
-
     deliverable = db.get(Deliverable, task.deliverable_id)
     if deliverable is None:
         return
-
     recalculate_deliverable_progress(db, deliverable.id)
-
     workstream = db.get(Workstream, deliverable.workstream_id)
     if workstream is None:
         return
-
     recalculate_workstream_progress(db, workstream.id)
     recalculate_engagement_progress(db, workstream.engagement_id)
 
 
 def recalculate_from_deliverable(db: Session, deliverable: Deliverable) -> None:
     recalculate_deliverable_progress(db, deliverable.id)
-
     workstream = db.get(Workstream, deliverable.workstream_id)
     if workstream is None:
         return
-
     recalculate_workstream_progress(db, workstream.id)
     recalculate_engagement_progress(db, workstream.engagement_id)
 
@@ -274,14 +273,16 @@ def recalculate_from_workstream(db: Session, workstream: Workstream) -> None:
 
 
 def get_effective_completion_date(item: Any) -> date | None:
-    revised_completion_date = getattr(item, "revised_completion_date", None)
-    target_completion_date = getattr(item, "target_completion_date", None)
-    return revised_completion_date or target_completion_date
+    return getattr(item, "revised_completion_date", None) or getattr(item, "target_completion_date", None)
 
 
 def get_parent_title(item: Any, parent_type: str) -> str:
     if parent_type == "task":
         return item.title
+    if parent_type == "data_point":
+        return item.topic
+    if parent_type == "stakeholder_question":
+        return item.question_text[:240]
     return item.name if hasattr(item, "name") else item.title
 
 
@@ -308,24 +309,14 @@ def close_active_reminders_for_parent(db: Session, *, parent_type: str, parent_i
 def classify_due_date(effective_due_date: date, today: date) -> tuple[str, str, str]:
     if effective_due_date < today:
         return "overdue", "Overdue", "high"
-
     if effective_due_date == today:
         return "due_today", "Due Today", "medium"
-
-    due_soon_threshold = today + timedelta(days=REMINDER_LOOKAHEAD_DAYS)
-    if effective_due_date <= due_soon_threshold:
+    if effective_due_date <= today + timedelta(days=REMINDER_LOOKAHEAD_DAYS):
         return "due_soon", "Due Soon", "low"
-
     return "not_due", "Not Due", "none"
 
 
-def create_or_update_due_reminder(
-    db: Session,
-    *,
-    parent_type: str,
-    item: Any,
-    today: date,
-) -> bool:
+def create_or_update_due_reminder(db: Session, *, parent_type: str, item: Any, today: date) -> bool:
     if is_completed(getattr(item, "status", None)):
         close_active_reminders_for_parent(db, parent_type=parent_type, parent_id=item.id)
         return False
@@ -342,6 +333,29 @@ def create_or_update_due_reminder(
         close_active_reminders_for_parent(db, parent_type=parent_type, parent_id=item.id)
         return False
 
+    return upsert_reminder(
+        db,
+        parent_type=parent_type,
+        item=item,
+        today=today,
+        reminder_type=reminder_type,
+        reminder_status=reminder_status,
+        severity=severity,
+        effective_due_date=effective_due_date,
+    )
+
+
+def upsert_reminder(
+    db: Session,
+    *,
+    parent_type: str,
+    item: Any,
+    today: date,
+    reminder_type: str,
+    reminder_status: str,
+    severity: str,
+    effective_due_date: date,
+) -> bool:
     parent_title = get_parent_title(item, parent_type)
     parent_external_id = get_parent_external_id(item)
 
@@ -354,18 +368,18 @@ def create_or_update_due_reminder(
     )
 
     display_name = f"{parent_external_id} - {parent_title}" if parent_external_id else parent_title
-
     title = f"{reminder_status}: {display_name}"
 
-    if reminder_status == "Overdue":
+    if parent_type == "data_point":
+        message = f"Data point '{display_name}' is expected by {effective_due_date} and is not yet received."
+    elif parent_type == "stakeholder_question":
+        message = f"Stakeholder response for '{display_name}' is expected by {effective_due_date} and is not yet received."
+    elif reminder_status == "Overdue":
         message = f"{parent_type.title()} '{display_name}' is overdue. Complete it or revise the completion date."
     elif reminder_status == "Due Today":
         message = f"{parent_type.title()} '{display_name}' is due today."
     else:
-        message = (
-            f"{parent_type.title()} '{display_name}' is due within the next "
-            f"{REMINDER_LOOKAHEAD_DAYS} days."
-        )
+        message = f"{parent_type.title()} '{display_name}' is due within the next {REMINDER_LOOKAHEAD_DAYS} days."
 
     if existing is None:
         reminder = Reminder(
@@ -398,24 +412,82 @@ def create_or_update_due_reminder(
     return True
 
 
+def create_or_update_data_point_reminder(db: Session, *, item: DataPoint, today: date) -> bool:
+    if is_data_point_closed(item.status) or item.actual_received_date is not None:
+        close_active_reminders_for_parent(db, parent_type="data_point", parent_id=item.id)
+        return False
+
+    if item.expected_received_date is None:
+        close_active_reminders_for_parent(db, parent_type="data_point", parent_id=item.id)
+        return False
+
+    reminder_type, reminder_status, severity = classify_due_date(item.expected_received_date, today)
+
+    if reminder_type == "not_due":
+        close_active_reminders_for_parent(db, parent_type="data_point", parent_id=item.id)
+        return False
+
+    return upsert_reminder(
+        db,
+        parent_type="data_point",
+        item=item,
+        today=today,
+        reminder_type=reminder_type,
+        reminder_status=reminder_status,
+        severity=severity,
+        effective_due_date=item.expected_received_date,
+    )
+
+
+def create_or_update_question_reminder(db: Session, *, item: StakeholderQuestion, today: date) -> bool:
+    if is_question_closed(item.response_status) or item.actual_response_date is not None:
+        close_active_reminders_for_parent(db, parent_type="stakeholder_question", parent_id=item.id)
+        return False
+
+    if item.expected_response_date is None:
+        close_active_reminders_for_parent(db, parent_type="stakeholder_question", parent_id=item.id)
+        return False
+
+    reminder_type, reminder_status, severity = classify_due_date(item.expected_response_date, today)
+
+    if reminder_type == "not_due":
+        close_active_reminders_for_parent(db, parent_type="stakeholder_question", parent_id=item.id)
+        return False
+
+    return upsert_reminder(
+        db,
+        parent_type="stakeholder_question",
+        item=item,
+        today=today,
+        reminder_type=reminder_type,
+        reminder_status=reminder_status,
+        severity=severity,
+        effective_due_date=item.expected_response_date,
+    )
+
+
 def generate_all_reminders(db: Session) -> int:
     today = date.today()
     generated_or_updated = 0
 
-    deliverables = list(db.scalars(select(Deliverable)).all())
-    tasks = list(db.scalars(select(Task)).all())
-    subtasks = list(db.scalars(select(Subtask)).all())
-
-    for deliverable in deliverables:
+    for deliverable in list(db.scalars(select(Deliverable)).all()):
         if create_or_update_due_reminder(db, parent_type="deliverable", item=deliverable, today=today):
             generated_or_updated += 1
 
-    for task in tasks:
+    for task in list(db.scalars(select(Task)).all()):
         if create_or_update_due_reminder(db, parent_type="task", item=task, today=today):
             generated_or_updated += 1
 
-    for subtask in subtasks:
+    for subtask in list(db.scalars(select(Subtask)).all()):
         if create_or_update_due_reminder(db, parent_type="subtask", item=subtask, today=today):
+            generated_or_updated += 1
+
+    for data_point in list(db.scalars(select(DataPoint)).all()):
+        if create_or_update_data_point_reminder(db, item=data_point, today=today):
+            generated_or_updated += 1
+
+    for question in list(db.scalars(select(StakeholderQuestion)).all()):
+        if create_or_update_question_reminder(db, item=question, today=today):
             generated_or_updated += 1
 
     return generated_or_updated
@@ -423,7 +495,6 @@ def generate_all_reminders(db: Session) -> int:
 
 def count_active_reminders(db: Session, reminder_type: str | None = None) -> int:
     today = date.today()
-
     statement = select(func.count()).select_from(Reminder).where(
         Reminder.is_active.is_(True),
         (Reminder.snoozed_until.is_(None)) | (Reminder.snoozed_until <= today),
@@ -446,6 +517,8 @@ def dashboard_summary(db: Annotated[Session, Depends(get_db)]) -> DashboardSumma
         deliverables=db.scalar(select(func.count()).select_from(Deliverable)) or 0,
         tasks=db.scalar(select(func.count()).select_from(Task)) or 0,
         subtasks=db.scalar(select(func.count()).select_from(Subtask)) or 0,
+        data_points=db.scalar(select(func.count()).select_from(DataPoint)) or 0,
+        stakeholder_questions=db.scalar(select(func.count()).select_from(StakeholderQuestion)) or 0,
         active_reminders=count_active_reminders(db),
         overdue_reminders=count_active_reminders(db, "overdue"),
         due_today_reminders=count_active_reminders(db, "due_today"),
@@ -457,7 +530,6 @@ def dashboard_summary(db: Annotated[Session, Depends(get_db)]) -> DashboardSumma
 def generate_reminders(db: Annotated[Session, Depends(get_db)]) -> ReminderGenerateResponse:
     generated_or_updated = generate_all_reminders(db)
     db.commit()
-
     return ReminderGenerateResponse(
         generated_or_updated=generated_or_updated,
         active_reminders=count_active_reminders(db),
@@ -473,13 +545,10 @@ def list_active_reminders(
     db.commit()
 
     today = date.today()
-
     statement = select(Reminder).where(Reminder.is_active.is_(True))
 
     if not include_snoozed:
-        statement = statement.where(
-            (Reminder.snoozed_until.is_(None)) | (Reminder.snoozed_until <= today)
-        )
+        statement = statement.where((Reminder.snoozed_until.is_(None)) | (Reminder.snoozed_until <= today))
 
     statement = statement.order_by(
         Reminder.effective_due_date.asc().nullslast(),
@@ -497,7 +566,6 @@ def snooze_reminder(
     db: Annotated[Session, Depends(get_db)],
 ) -> Reminder:
     reminder = db.get(Reminder, reminder_id)
-
     if reminder is None:
         raise HTTPException(status_code=404, detail="Reminder not found")
 
@@ -593,11 +661,7 @@ def list_workstreams(
 ) -> list[Workstream]:
     statement = select(Workstream).order_by(Workstream.created_at.desc())
     if engagement_id is not None:
-        statement = (
-            select(Workstream)
-            .where(Workstream.engagement_id == engagement_id)
-            .order_by(Workstream.created_at.desc())
-        )
+        statement = select(Workstream).where(Workstream.engagement_id == engagement_id).order_by(Workstream.created_at.desc())
     return list(db.scalars(statement).all())
 
 
@@ -658,11 +722,7 @@ def list_deliverables(
 ) -> list[Deliverable]:
     statement = select(Deliverable).order_by(Deliverable.created_at.desc())
     if workstream_id is not None:
-        statement = (
-            select(Deliverable)
-            .where(Deliverable.workstream_id == workstream_id)
-            .order_by(Deliverable.created_at.desc())
-        )
+        statement = select(Deliverable).where(Deliverable.workstream_id == workstream_id).order_by(Deliverable.created_at.desc())
     return list(db.scalars(statement).all())
 
 
@@ -818,6 +878,120 @@ def update_subtask(
     )
     recalculate_from_subtask(db, item)
     create_or_update_due_reminder(db, parent_type="subtask", item=item, today=date.today())
+
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@app.post("/api/data-points", response_model=DataPointRead)
+def create_data_point(payload: DataPointCreate, db: Annotated[Session, Depends(get_db)]) -> DataPoint:
+    if db.get(Subtask, payload.subtask_id) is None:
+        raise HTTPException(status_code=404, detail="Sub-task not found")
+
+    item = DataPoint(**payload.model_dump())
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    create_or_update_data_point_reminder(db, item=item, today=date.today())
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@app.get("/api/data-points", response_model=list[DataPointRead])
+def list_data_points(
+    db: Annotated[Session, Depends(get_db)],
+    subtask_id: uuid.UUID | None = Query(default=None),
+) -> list[DataPoint]:
+    statement = select(DataPoint).order_by(DataPoint.created_at.desc())
+    if subtask_id is not None:
+        statement = select(DataPoint).where(DataPoint.subtask_id == subtask_id).order_by(DataPoint.created_at.desc())
+    return list(db.scalars(statement).all())
+
+
+@app.get("/api/data-points/{data_point_id}", response_model=DataPointRead)
+def get_data_point(data_point_id: uuid.UUID, db: Annotated[Session, Depends(get_db)]) -> DataPoint:
+    item = db.get(DataPoint, data_point_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Data point not found")
+    return item
+
+
+@app.put("/api/data-points/{data_point_id}", response_model=DataPointRead)
+def update_data_point(
+    data_point_id: uuid.UUID,
+    payload: DataPointUpdate,
+    db: Annotated[Session, Depends(get_db)],
+) -> DataPoint:
+    item = db.get(DataPoint, data_point_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Data point not found")
+
+    update_simple_model_from_payload(item, payload)
+    create_or_update_data_point_reminder(db, item=item, today=date.today())
+
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@app.post("/api/stakeholder-questions", response_model=StakeholderQuestionRead)
+def create_stakeholder_question(
+    payload: StakeholderQuestionCreate,
+    db: Annotated[Session, Depends(get_db)],
+) -> StakeholderQuestion:
+    if db.get(Subtask, payload.subtask_id) is None:
+        raise HTTPException(status_code=404, detail="Sub-task not found")
+
+    item = StakeholderQuestion(**payload.model_dump())
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    create_or_update_question_reminder(db, item=item, today=date.today())
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@app.get("/api/stakeholder-questions", response_model=list[StakeholderQuestionRead])
+def list_stakeholder_questions(
+    db: Annotated[Session, Depends(get_db)],
+    subtask_id: uuid.UUID | None = Query(default=None),
+) -> list[StakeholderQuestion]:
+    statement = select(StakeholderQuestion).order_by(StakeholderQuestion.created_at.desc())
+    if subtask_id is not None:
+        statement = (
+            select(StakeholderQuestion)
+            .where(StakeholderQuestion.subtask_id == subtask_id)
+            .order_by(StakeholderQuestion.created_at.desc())
+        )
+    return list(db.scalars(statement).all())
+
+
+@app.get("/api/stakeholder-questions/{question_id}", response_model=StakeholderQuestionRead)
+def get_stakeholder_question(
+    question_id: uuid.UUID,
+    db: Annotated[Session, Depends(get_db)],
+) -> StakeholderQuestion:
+    item = db.get(StakeholderQuestion, question_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Stakeholder question not found")
+    return item
+
+
+@app.put("/api/stakeholder-questions/{question_id}", response_model=StakeholderQuestionRead)
+def update_stakeholder_question(
+    question_id: uuid.UUID,
+    payload: StakeholderQuestionUpdate,
+    db: Annotated[Session, Depends(get_db)],
+) -> StakeholderQuestion:
+    item = db.get(StakeholderQuestion, question_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Stakeholder question not found")
+
+    update_simple_model_from_payload(item, payload)
+    create_or_update_question_reminder(db, item=item, today=date.today())
 
     db.commit()
     db.refresh(item)
