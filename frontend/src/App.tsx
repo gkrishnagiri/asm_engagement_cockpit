@@ -15,6 +15,8 @@ import {
   getStakeholderQuestions,
   getSubtasks,
   getTasks,
+  getTimesheetSummaries,
+  getTimesheets,
   getUploadedFiles,
   getWorkstreams,
 } from "./api";
@@ -22,6 +24,7 @@ import { Mvp6CaptureWorkspace } from "./Mvp6CaptureWorkspace";
 import { Mvp7FileUploadPanel } from "./Mvp7FileUploadPanel";
 import { Mvp8LlmPanel } from "./Mvp8LlmPanel";
 import { Mvp9ReportsPanel } from "./Mvp9ReportsPanel";
+import { Mvp10TimesheetPanel } from "./Mvp10TimesheetPanel";
 
 function StatusBadge({ status }: { status: string }) {
   return <span className="status-badge">{status}</span>;
@@ -98,6 +101,11 @@ function App() {
     queryKey: ["deliverable-reviews"],
     queryFn: getDeliverableReviews,
   });
+  const timesheetsQuery = useQuery({ queryKey: ["timesheets"], queryFn: getTimesheets });
+  const timesheetSummariesQuery = useQuery({
+    queryKey: ["timesheet-summaries"],
+    queryFn: getTimesheetSummaries,
+  });
 
   const summary = summaryQuery.data;
   const reminders = remindersQuery.data ?? [];
@@ -114,6 +122,10 @@ function App() {
   const workstreams = workstreamsQuery.data ?? [];
   const llmRecommendations = llmRecommendationsQuery.data ?? [];
   const deliverableReviews = deliverableReviewsQuery.data ?? [];
+  const timesheets = timesheetsQuery.data ?? [];
+  const timesheetSummaries = timesheetSummariesQuery.data ?? [];
+
+  const totalTimesheetHours = timesheets.reduce((sum, item) => sum + item.effort_hours, 0);
 
   return (
     <div className="app-shell">
@@ -143,6 +155,7 @@ function App() {
           <a href="#file-upload">File Upload</a>
           <a href="#llm-recommendations">LLM Recommendations</a>
           <a href="#reports-exports">Reports & Exports</a>
+          <a href="#timesheets">Timesheets</a>
           <a href="#future">Future MVPs</a>
         </nav>
       </aside>
@@ -150,12 +163,11 @@ function App() {
       <main className="main">
         <section id="dashboard" className="hero-card">
           <div>
-            <p className="eyebrow">MVP 9 Reports and Exports</p>
-            <h2>Execution reports and CSV exports are now available.</h2>
+            <p className="eyebrow">MVP 10 Daily Timesheets and LLM Summaries</p>
+            <h2>Daily timesheet tracking and accomplishment summaries are now available.</h2>
             <p>
-              The cockpit now provides report summaries and downloadable CSV exports for
-              engagement tracking, consulting outputs, LLM outputs, uploaded files, and
-              status distribution.
+              The cockpit now supports daily effort capture, work item linkage, weekly submission,
+              and OpenAI-traced accomplishment summaries by day, week, or custom date range.
             </p>
           </div>
           <div className="health-panel">
@@ -180,6 +192,8 @@ function App() {
           <div className="summary-card file-card"><span>Uploaded Files</span><strong>{uploadedFiles.length}</strong></div>
           <div className="summary-card llm-card"><span>LLM Recommendations</span><strong>{llmRecommendations.length}</strong></div>
           <div className="summary-card llm-card"><span>Deliverable Reviews</span><strong>{deliverableReviews.length}</strong></div>
+          <div className="summary-card timesheet-summary-card"><span>Timesheet Entries</span><strong>{timesheets.length}</strong></div>
+          <div className="summary-card timesheet-summary-card"><span>Timesheet Hours</span><strong>{totalTimesheetHours.toFixed(1)}</strong></div>
         </section>
 
         <section id="reminders" className="content-section">
@@ -514,13 +528,22 @@ function App() {
           deliverableReviews={deliverableReviews}
         />
 
+        <Mvp10TimesheetPanel
+          workstreams={workstreams}
+          deliverables={deliverables}
+          tasks={tasks}
+          subtasks={subtasks}
+          timesheets={timesheets}
+          timesheetSummaries={timesheetSummaries}
+        />
+
         <section id="future" className="content-section">
           <h2>Future MVPs</h2>
           <div className="future-grid">
-            <div>Daily and weekly timesheet summaries</div>
             <div>Deliverable review workflow</div>
             <div>Advanced LLM recommendation management</div>
             <div>Role-based views and filters</div>
+            <div>Production hardening and authentication</div>
           </div>
         </section>
       </main>

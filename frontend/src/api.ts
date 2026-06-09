@@ -14,6 +14,8 @@ import type {
   Task,
   TextRefinementRequest,
   TextRefinementResponse,
+  TimesheetEntry,
+  TimesheetSummary,
   UploadedFile,
   Workstream,
 } from "./types";
@@ -116,6 +118,14 @@ export function getDeliverableReviews(): Promise<DeliverableReview[]> {
   return getJson<DeliverableReview[]>("/deliverable-reviews");
 }
 
+export function getTimesheets(): Promise<TimesheetEntry[]> {
+  return getJson<TimesheetEntry[]>("/timesheets");
+}
+
+export function getTimesheetSummaries(): Promise<TimesheetSummary[]> {
+  return getJson<TimesheetSummary[]>("/timesheet-summaries");
+}
+
 export function getUploadedFileDownloadUrl(uploadedFileId: string): string {
   return `${API_BASE_URL}/uploaded-files/${uploadedFileId}/download`;
 }
@@ -179,41 +189,15 @@ export function uploadFile(payload: {
 
   formData.append("file", payload.file);
 
-  if (payload.description) {
-    formData.append("description", payload.description);
-  }
-
-  if (payload.upload_category) {
-    formData.append("upload_category", payload.upload_category);
-  }
-
-  if (payload.subtask_id) {
-    formData.append("subtask_id", payload.subtask_id);
-  }
-
-  if (payload.data_point_id) {
-    formData.append("data_point_id", payload.data_point_id);
-  }
-
-  if (payload.stakeholder_question_id) {
-    formData.append("stakeholder_question_id", payload.stakeholder_question_id);
-  }
-
-  if (payload.finding_id) {
-    formData.append("finding_id", payload.finding_id);
-  }
-
-  if (payload.analysis_output_id) {
-    formData.append("analysis_output_id", payload.analysis_output_id);
-  }
-
-  if (payload.evidence_item_id) {
-    formData.append("evidence_item_id", payload.evidence_item_id);
-  }
-
-  if (payload.uploaded_by) {
-    formData.append("uploaded_by", payload.uploaded_by);
-  }
+  if (payload.description) formData.append("description", payload.description);
+  if (payload.upload_category) formData.append("upload_category", payload.upload_category);
+  if (payload.subtask_id) formData.append("subtask_id", payload.subtask_id);
+  if (payload.data_point_id) formData.append("data_point_id", payload.data_point_id);
+  if (payload.stakeholder_question_id) formData.append("stakeholder_question_id", payload.stakeholder_question_id);
+  if (payload.finding_id) formData.append("finding_id", payload.finding_id);
+  if (payload.analysis_output_id) formData.append("analysis_output_id", payload.analysis_output_id);
+  if (payload.evidence_item_id) formData.append("evidence_item_id", payload.evidence_item_id);
+  if (payload.uploaded_by) formData.append("uploaded_by", payload.uploaded_by);
 
   return postFormData<UploadedFile>("/uploaded-files", formData);
 }
@@ -237,4 +221,45 @@ export function generateDeliverableReview(payload: {
   created_by: string;
 }): Promise<DeliverableReview> {
   return postJson<DeliverableReview>("/deliverable-reviews/generate", payload);
+}
+
+export function createTimesheet(payload: {
+  entry_date: string;
+  person_name: string;
+  workstream_id?: string | null;
+  deliverable_id?: string | null;
+  task_id?: string | null;
+  subtask_id?: string | null;
+  activity_type: string;
+  accomplishments: string;
+  blockers?: string | null;
+  next_steps?: string | null;
+  effort_hours: number;
+  status: string;
+}): Promise<TimesheetEntry> {
+  return postJson<TimesheetEntry>("/timesheets", payload);
+}
+
+export function submitTimesheetWeek(payload: {
+  start_date: string;
+  end_date: string;
+  person_name: string;
+  submitted_by: string;
+}): Promise<{
+  submitted_count: number;
+  start_date: string;
+  end_date: string;
+  person_name: string;
+}> {
+  return postJson("/timesheets/submit-week", payload);
+}
+
+export function generateTimesheetSummary(payload: {
+  start_date: string;
+  end_date: string;
+  person_name: string;
+  summary_type: string;
+  created_by: string;
+}): Promise<TimesheetSummary> {
+  return postJson<TimesheetSummary>("/timesheets/generate-summary", payload);
 }

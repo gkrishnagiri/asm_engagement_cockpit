@@ -52,6 +52,7 @@ from app.schemas import (
 )
 from app.mvp5_findings_router import router as mvp5_findings_router
 from app.mvp6_refinement_router import router as mvp6_refinement_router
+from app.mvp10_timesheets_router import router as mvp10_timesheets_router
 
 settings = get_settings()
 
@@ -70,6 +71,7 @@ app.add_middleware(
 
 app.include_router(mvp5_findings_router)
 app.include_router(mvp6_refinement_router)
+app.include_router(mvp10_timesheets_router)
 
 COMPLETED_STATUS = "Completed"
 REMINDER_LOOKAHEAD_DAYS = 7

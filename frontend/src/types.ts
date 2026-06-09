@@ -261,6 +261,48 @@ export type DeliverableReview = {
   updated_at: string;
 };
 
+export type TimesheetEntry = {
+  id: string;
+  entry_date: string;
+  person_name: string;
+  workstream_id: string | null;
+  deliverable_id: string | null;
+  task_id: string | null;
+  subtask_id: string | null;
+  activity_type: string;
+  accomplishments: string;
+  blockers: string | null;
+  next_steps: string | null;
+  effort_hours: number;
+  status: string;
+  submitted: boolean;
+  submitted_at: string | null;
+  submitted_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TimesheetSummary = {
+  id: string;
+  person_name: string;
+  summary_type: string;
+  start_date: string;
+  end_date: string;
+  total_effort_hours: number;
+  entry_count: number;
+  summary_text: string;
+  accomplishments_summary: string | null;
+  blockers_summary: string | null;
+  next_steps_summary: string | null;
+  source_context: string | null;
+  llm_raw_output: string | null;
+  model_name: string | null;
+  trace_workflow_name: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Reminder = {
   id: string;
   parent_type: string;

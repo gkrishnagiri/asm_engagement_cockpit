@@ -154,7 +154,7 @@ button {
 }
 
 .data-summary-grid {
-  grid-template-columns: repeat(7, minmax(130px, 1fr));
+  grid-template-columns: repeat(9, minmax(130px, 1fr));
 }
 
 .summary-card {
@@ -190,6 +190,10 @@ button {
 
 .llm-card {
   border-left: 6px solid #9333ea;
+}
+
+.timesheet-summary-card {
+  border-left: 6px solid #ea580c;
 }
 
 .reminder-summary {
@@ -425,7 +429,8 @@ tr:last-child td {
 .capture-workspace,
 .file-upload-panel,
 .llm-generator-card,
-.report-section-card {
+.report-section-card,
+.timesheet-card {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 18px;
@@ -435,7 +440,8 @@ tr:last-child td {
 
 .capture-controls,
 .file-upload-grid,
-.llm-form-grid {
+.llm-form-grid,
+.timesheet-form-grid {
   display: grid;
   grid-template-columns: minmax(220px, 320px) 1fr;
   gap: 16px;
@@ -443,13 +449,15 @@ tr:last-child td {
 }
 
 .file-upload-grid,
-.llm-form-grid {
+.llm-form-grid,
+.timesheet-form-grid {
   grid-template-columns: repeat(2, minmax(240px, 1fr));
 }
 
 .capture-controls label,
 .file-upload-grid label,
 .llm-form-grid label,
+.timesheet-form-grid label,
 .text-area-label {
   display: grid;
   gap: 8px;
@@ -464,7 +472,10 @@ tr:last-child td {
 .file-upload-grid textarea,
 .llm-form-grid select,
 .llm-form-grid input,
-.llm-form-grid textarea {
+.llm-form-grid textarea,
+.timesheet-form-grid select,
+.timesheet-form-grid input,
+.timesheet-form-grid textarea {
   width: 100%;
   border: 1px solid #cbd5e1;
   border-radius: 12px;
@@ -474,7 +485,8 @@ tr:last-child td {
 }
 
 .file-upload-grid textarea,
-.llm-form-grid textarea {
+.llm-form-grid textarea,
+.timesheet-form-grid textarea {
   min-height: 110px;
   resize: vertical;
   font: inherit;
@@ -482,7 +494,8 @@ tr:last-child td {
 }
 
 .file-description-field,
-.llm-full-width {
+.llm-full-width,
+.timesheet-full-width {
   grid-column: span 2;
 }
 
@@ -555,20 +568,23 @@ tr:last-child td {
   font-weight: 800;
 }
 
-.llm-panel-grid {
+.llm-panel-grid,
+.timesheet-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(280px, 1fr));
   gap: 18px;
 }
 
 .llm-generator-card h3,
-.report-section-card h3 {
+.report-section-card h3,
+.timesheet-card h3 {
   margin: 0 0 8px;
   font-size: 20px;
 }
 
 .llm-generator-card p,
-.report-section-card p {
+.report-section-card p,
+.timesheet-card p {
   color: #64748b;
   line-height: 1.5;
   margin-top: 0;
@@ -620,6 +636,12 @@ tr:last-child td {
   margin-top: 16px;
 }
 
+.timesheet-divider {
+  height: 1px;
+  background: #e2e8f0;
+  margin: 22px 0;
+}
+
 @media (max-width: 1450px) {
   .data-summary-grid,
   .report-summary-grid {
@@ -647,12 +669,15 @@ tr:last-child td {
   .llm-form-grid,
   .llm-panel-grid,
   .report-summary-grid,
-  .export-grid {
+  .export-grid,
+  .timesheet-grid,
+  .timesheet-form-grid {
     grid-template-columns: 1fr;
   }
 
   .file-description-field,
-  .llm-full-width {
+  .llm-full-width,
+  .timesheet-full-width {
     grid-column: span 1;
   }
 
