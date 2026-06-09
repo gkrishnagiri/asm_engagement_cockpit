@@ -50,6 +50,7 @@ from app.schemas import (
     WorkstreamRead,
     WorkstreamUpdate,
 )
+from app.mvp5_findings_router import router as mvp5_findings_router
 
 settings = get_settings()
 
@@ -66,6 +67,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(mvp5_findings_router)
 
 COMPLETED_STATUS = "Completed"
 REMINDER_LOOKAHEAD_DAYS = 7

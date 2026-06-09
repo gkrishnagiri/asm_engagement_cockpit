@@ -1,8 +1,11 @@
 import type {
+  AnalysisOutput,
   DashboardSummary,
   DataPoint,
   Deliverable,
   Engagement,
+  EvidenceItem,
+  Finding,
   Reminder,
   StakeholderQuestion,
   Subtask,
@@ -68,6 +71,18 @@ export function getDataPoints(): Promise<DataPoint[]> {
 
 export function getStakeholderQuestions(): Promise<StakeholderQuestion[]> {
   return getJson<StakeholderQuestion[]>("/stakeholder-questions");
+}
+
+export function getFindings(): Promise<Finding[]> {
+  return getJson<Finding[]>("/findings");
+}
+
+export function getAnalysisOutputs(): Promise<AnalysisOutput[]> {
+  return getJson<AnalysisOutput[]>("/analysis-outputs");
+}
+
+export function getEvidenceItems(): Promise<EvidenceItem[]> {
+  return getJson<EvidenceItem[]>("/evidence-items");
 }
 
 export function getActiveReminders(): Promise<Reminder[]> {

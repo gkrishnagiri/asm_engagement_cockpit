@@ -136,6 +136,65 @@ export type StakeholderQuestion = {
   updated_at: string;
 };
 
+export type Finding = {
+  id: string;
+  subtask_id: string;
+  task_id: string | null;
+  deliverable_id: string | null;
+  title: string;
+  finding_type: string | null;
+  severity: string | null;
+  finding_text: string;
+  business_impact: string | null;
+  recommendation: string | null;
+  status: string;
+  confidence_level: string | null;
+  is_validated: boolean;
+  validated_by: string | null;
+  validated_date: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AnalysisOutput = {
+  id: string;
+  subtask_id: string;
+  task_id: string | null;
+  deliverable_id: string | null;
+  analysis_title: string;
+  analysis_type: string | null;
+  analysis_text: string;
+  methodology: string | null;
+  assumptions: string | null;
+  limitations: string | null;
+  status: string;
+  confidence_level: string | null;
+  reviewed_by: string | null;
+  reviewed_date: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type EvidenceItem = {
+  id: string;
+  subtask_id: string | null;
+  finding_id: string | null;
+  analysis_output_id: string | null;
+  data_point_id: string | null;
+  stakeholder_question_id: string | null;
+  evidence_type: string;
+  title: string;
+  description: string | null;
+  source_name: string | null;
+  source_reference: string | null;
+  evidence_date: string | null;
+  confidence_level: string | null;
+  is_primary_evidence: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Reminder = {
   id: string;
   parent_type: string;

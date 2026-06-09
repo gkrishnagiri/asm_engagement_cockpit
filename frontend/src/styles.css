@@ -439,3 +439,7 @@ tr:last-child td {
     margin-top: 14px;
   }
 }
+
+.output-card {
+  border-left: 6px solid #7c3aed;
+}
