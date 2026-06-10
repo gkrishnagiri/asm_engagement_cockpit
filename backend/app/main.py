@@ -54,6 +54,7 @@ from app.mvp5_findings_router import router as mvp5_findings_router
 from app.mvp6_refinement_router import router as mvp6_refinement_router
 from app.mvp10_timesheets_router import router as mvp10_timesheets_router
 from app.mvp11_review_workflow_router import router as mvp11_review_workflow_router
+from app.mvp12_recommendation_management_router import router as mvp12_recommendation_management_router
 
 settings = get_settings()
 
@@ -74,6 +75,7 @@ app.include_router(mvp5_findings_router)
 app.include_router(mvp6_refinement_router)
 app.include_router(mvp10_timesheets_router)
 app.include_router(mvp11_review_workflow_router)
+app.include_router(mvp12_recommendation_management_router)
 
 COMPLETED_STATUS = "Completed"
 REMINDER_LOOKAHEAD_DAYS = 7

@@ -10,6 +10,9 @@ import type {
   EvidenceItem,
   Finding,
   LlmRecommendation,
+  LlmRecommendationActionItem,
+  LlmRecommendationDecision,
+  LlmRecommendationRevision,
   Reminder,
   StakeholderQuestion,
   Subtask,
@@ -133,6 +136,18 @@ export function getLlmRecommendations(): Promise<LlmRecommendation[]> {
   return getJson<LlmRecommendation[]>("/llm-recommendations");
 }
 
+export function getLlmRecommendationDecisions(): Promise<LlmRecommendationDecision[]> {
+  return getJson<LlmRecommendationDecision[]>("/llm-recommendation-decisions");
+}
+
+export function getLlmRecommendationRevisions(): Promise<LlmRecommendationRevision[]> {
+  return getJson<LlmRecommendationRevision[]>("/llm-recommendation-revisions");
+}
+
+export function getLlmRecommendationActionItems(): Promise<LlmRecommendationActionItem[]> {
+  return getJson<LlmRecommendationActionItem[]>("/llm-recommendation-action-items");
+}
+
 export function getDeliverableReviews(): Promise<DeliverableReview[]> {
   return getJson<DeliverableReview[]>("/deliverable-reviews");
 }
@@ -248,6 +263,93 @@ export function generateDeliverableReview(payload: {
   created_by: string;
 }): Promise<DeliverableReview> {
   return postJson<DeliverableReview>("/deliverable-reviews/generate", payload);
+}
+
+export function recordLlmRecommendationDecision(payload: {
+  recommendation_id: string;
+  decision: string;
+  decision_notes?: string | null;
+  decided_by?: string | null;
+}): Promise<LlmRecommendationDecision> {
+  return postJson<LlmRecommendationDecision>(
+    `/llm-recommendations/${payload.recommendation_id}/decision`,
+    {
+      decision: payload.decision,
+      decision_notes: payload.decision_notes,
+      decided_by: payload.decided_by,
+    },
+  );
+}
+
+export function reviseLlmRecommendation(payload: {
+  recommendation_id: string;
+  title?: string | null;
+  recommendation_text?: string | null;
+  rationale?: string | null;
+  expected_benefit?: string | null;
+  implementation_notes?: string | null;
+  revision_notes?: string | null;
+  revised_by?: string | null;
+}): Promise<LlmRecommendationRevision> {
+  return putJson<LlmRecommendationRevision>(
+    `/llm-recommendations/${payload.recommendation_id}/revise`,
+    {
+      title: payload.title,
+      recommendation_text: payload.recommendation_text,
+      rationale: payload.rationale,
+      expected_benefit: payload.expected_benefit,
+      implementation_notes: payload.implementation_notes,
+      revision_notes: payload.revision_notes,
+      revised_by: payload.revised_by,
+    },
+  );
+}
+
+export function createLlmRecommendationActionItem(payload: {
+  recommendation_id: string;
+  action_title: string;
+  action_description?: string | null;
+  owner_name?: string | null;
+  priority?: string | null;
+  status: string;
+  due_date?: string | null;
+  created_by?: string | null;
+}): Promise<LlmRecommendationActionItem> {
+  return postJson<LlmRecommendationActionItem>("/llm-recommendation-action-items", payload);
+}
+
+export function updateLlmRecommendationActionItem(payload: {
+  action_item_id: string;
+  action_title?: string | null;
+  action_description?: string | null;
+  owner_name?: string | null;
+  priority?: string | null;
+  status?: string | null;
+  due_date?: string | null;
+  completion_notes?: string | null;
+}): Promise<LlmRecommendationActionItem> {
+  return putJson<LlmRecommendationActionItem>(
+    `/llm-recommendation-action-items/${payload.action_item_id}`,
+    {
+      action_title: payload.action_title,
+      action_description: payload.action_description,
+      owner_name: payload.owner_name,
+      priority: payload.priority,
+      status: payload.status,
+      due_date: payload.due_date,
+      completion_notes: payload.completion_notes,
+    },
+  );
+}
+
+export function markLlmRecommendationCompleted(payload: {
+  recommendation_id: string;
+}): Promise<{
+  recommendation_id: string;
+  status: string;
+  message: string;
+}> {
+  return postJson(`/llm-recommendations/${payload.recommendation_id}/mark-completed`);
 }
 
 export function createTimesheet(payload: {

@@ -240,6 +240,58 @@ export type LlmRecommendation = {
   updated_at: string;
 };
 
+export type LlmRecommendationDecision = {
+  id: string;
+  recommendation_id: string;
+  decision: string;
+  decision_notes: string | null;
+  previous_status: string | null;
+  new_status: string;
+  decided_by: string | null;
+  decided_at: string;
+  created_at: string;
+};
+
+export type LlmRecommendationRevision = {
+  id: string;
+  recommendation_id: string;
+  previous_title: string | null;
+  revised_title: string | null;
+  previous_recommendation_text: string | null;
+  revised_recommendation_text: string | null;
+  previous_rationale: string | null;
+  revised_rationale: string | null;
+  previous_expected_benefit: string | null;
+  revised_expected_benefit: string | null;
+  previous_implementation_notes: string | null;
+  revised_implementation_notes: string | null;
+  revision_notes: string | null;
+  revised_by: string | null;
+  revised_at: string;
+  created_at: string;
+};
+
+export type LlmRecommendationActionItem = {
+  id: string;
+  recommendation_id: string;
+  deliverable_id: string | null;
+  task_id: string | null;
+  subtask_id: string | null;
+  finding_id: string | null;
+  analysis_output_id: string | null;
+  action_title: string;
+  action_description: string | null;
+  owner_name: string | null;
+  priority: string | null;
+  status: string;
+  due_date: string | null;
+  completed_at: string | null;
+  completion_notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type DeliverableReview = {
   id: string;
   deliverable_id: string;

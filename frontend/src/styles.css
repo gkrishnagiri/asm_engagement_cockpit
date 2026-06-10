@@ -694,3 +694,7 @@ tr:last-child td {
 .review-summary-card {
   border-left: 6px solid #be123c;
 }
+
+.recommendation-summary-card {
+  border-left: 6px solid #c2410c;
+}

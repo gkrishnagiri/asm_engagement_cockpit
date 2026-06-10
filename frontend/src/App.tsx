@@ -13,6 +13,9 @@ import {
   getEngagements,
   getEvidenceItems,
   getFindings,
+  getLlmRecommendationActionItems,
+  getLlmRecommendationDecisions,
+  getLlmRecommendationRevisions,
   getLlmRecommendations,
   getStakeholderQuestions,
   getSubtasks,
@@ -28,6 +31,7 @@ import { Mvp8LlmPanel } from "./Mvp8LlmPanel";
 import { Mvp9ReportsPanel } from "./Mvp9ReportsPanel";
 import { Mvp10TimesheetPanel } from "./Mvp10TimesheetPanel";
 import { Mvp11ReviewWorkflowPanel } from "./Mvp11ReviewWorkflowPanel";
+import { Mvp12RecommendationManagementPanel } from "./Mvp12RecommendationManagementPanel";
 
 function StatusBadge({ status }: { status: string }) {
   return <span className="status-badge">{status}</span>;
@@ -100,6 +104,18 @@ function App() {
     queryKey: ["llm-recommendations"],
     queryFn: getLlmRecommendations,
   });
+  const llmRecommendationDecisionsQuery = useQuery({
+    queryKey: ["llm-recommendation-decisions"],
+    queryFn: getLlmRecommendationDecisions,
+  });
+  const llmRecommendationRevisionsQuery = useQuery({
+    queryKey: ["llm-recommendation-revisions"],
+    queryFn: getLlmRecommendationRevisions,
+  });
+  const llmRecommendationActionItemsQuery = useQuery({
+    queryKey: ["llm-recommendation-action-items"],
+    queryFn: getLlmRecommendationActionItems,
+  });
   const deliverableReviewsQuery = useQuery({
     queryKey: ["deliverable-reviews"],
     queryFn: getDeliverableReviews,
@@ -132,6 +148,9 @@ function App() {
   const engagements = engagementsQuery.data ?? [];
   const workstreams = workstreamsQuery.data ?? [];
   const llmRecommendations = llmRecommendationsQuery.data ?? [];
+  const llmRecommendationDecisions = llmRecommendationDecisionsQuery.data ?? [];
+  const llmRecommendationRevisions = llmRecommendationRevisionsQuery.data ?? [];
+  const llmRecommendationActionItems = llmRecommendationActionItemsQuery.data ?? [];
   const deliverableReviews = deliverableReviewsQuery.data ?? [];
   const reviewWorkflows = reviewWorkflowsQuery.data ?? [];
   const reviewActionItems = reviewActionItemsQuery.data ?? [];
@@ -140,6 +159,9 @@ function App() {
 
   const totalTimesheetHours = timesheets.reduce((sum, item) => sum + item.effort_hours, 0);
   const openReviewActions = reviewActionItems.filter((item) => item.status.toLowerCase() !== "completed");
+  const openRecommendationActions = llmRecommendationActionItems.filter(
+    (item) => item.status.toLowerCase() !== "completed",
+  );
 
   return (
     <div className="app-shell">
@@ -168,6 +190,7 @@ function App() {
           <a href="#dictation-refinement">Dictation & Refinement</a>
           <a href="#file-upload">File Upload</a>
           <a href="#llm-recommendations">LLM Recommendations</a>
+          <a href="#recommendation-management">Recommendation Management</a>
           <a href="#reports-exports">Reports & Exports</a>
           <a href="#timesheets">Timesheets</a>
           <a href="#review-workflow">Review Workflow</a>
@@ -178,11 +201,11 @@ function App() {
       <main className="main">
         <section id="dashboard" className="hero-card">
           <div>
-            <p className="eyebrow">MVP 11 Deliverable Review Workflow</p>
-            <h2>Formal review workflow and approval lifecycle are now available.</h2>
+            <p className="eyebrow">MVP 12 Advanced Recommendation Management</p>
+            <h2>LLM recommendations can now be accepted, revised, actioned, and closed.</h2>
             <p>
-              The cockpit now supports submitting deliverables for review, recording
-              approval or rework decisions, and tracking review action items to closure.
+              The cockpit now supports recommendation lifecycle decisions, revision history,
+              implementation action items, and completion tracking.
             </p>
           </div>
           <div className="health-panel">
@@ -206,6 +229,7 @@ function App() {
           <div className="summary-card output-card"><span>Analysis Outputs</span><strong>{analysisOutputs.length}</strong></div>
           <div className="summary-card file-card"><span>Uploaded Files</span><strong>{uploadedFiles.length}</strong></div>
           <div className="summary-card llm-card"><span>LLM Recommendations</span><strong>{llmRecommendations.length}</strong></div>
+          <div className="summary-card recommendation-summary-card"><span>Recommendation Actions</span><strong>{openRecommendationActions.length}</strong></div>
           <div className="summary-card llm-card"><span>Deliverable Reviews</span><strong>{deliverableReviews.length}</strong></div>
           <div className="summary-card timesheet-summary-card"><span>Timesheet Entries</span><strong>{timesheets.length}</strong></div>
           <div className="summary-card timesheet-summary-card"><span>Timesheet Hours</span><strong>{totalTimesheetHours.toFixed(1)}</strong></div>
@@ -530,6 +554,13 @@ function App() {
           deliverableReviews={deliverableReviews}
         />
 
+        <Mvp12RecommendationManagementPanel
+          recommendations={llmRecommendations}
+          decisions={llmRecommendationDecisions}
+          revisions={llmRecommendationRevisions}
+          actionItems={llmRecommendationActionItems}
+        />
+
         <Mvp9ReportsPanel
           engagements={engagements}
           workstreams={workstreams}
@@ -564,10 +595,10 @@ function App() {
         <section id="future" className="content-section">
           <h2>Future MVPs</h2>
           <div className="future-grid">
-            <div>Advanced LLM recommendation management</div>
             <div>Role-based views and filters</div>
             <div>Production hardening and authentication</div>
             <div>Audit, notifications, and collaboration workflow</div>
+            <div>Deployment readiness and packaging</div>
           </div>
         </section>
       </main>
