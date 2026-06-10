@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
 import {
   generateReminders,
@@ -18,12 +19,15 @@ import {
   getLlmRecommendationRevisions,
   getLlmRecommendations,
   getStakeholderQuestions,
+  getStoredSession,
   getSubtasks,
   getTasks,
   getTimesheetSummaries,
   getTimesheets,
   getUploadedFiles,
   getWorkstreams,
+  isLoginRequired,
+  type StoredSession,
 } from "./api";
 import { Mvp6CaptureWorkspace } from "./Mvp6CaptureWorkspace";
 import { Mvp7FileUploadPanel } from "./Mvp7FileUploadPanel";
@@ -34,6 +38,7 @@ import { Mvp11ReviewWorkflowPanel } from "./Mvp11ReviewWorkflowPanel";
 import { Mvp12RecommendationManagementPanel } from "./Mvp12RecommendationManagementPanel";
 import { Mvp13RoleBasedViewsPanel } from "./Mvp13RoleBasedViewsPanel";
 import { Mvp14RuntimeConfigPanel } from "./Mvp14RuntimeConfigPanel";
+import { Mvp15AuthPanel } from "./Mvp15AuthPanel";
 
 function StatusBadge({ status }: { status: string }) {
   return <span className="status-badge">{status}</span>;
@@ -66,15 +71,20 @@ function yesNo(value: boolean) {
 
 function App() {
   const queryClient = useQueryClient();
+  const [session, setSession] = useState<StoredSession | null>(() => getStoredSession());
+
+  const loginRequired = isLoginRequired();
 
   const summaryQuery = useQuery({
     queryKey: ["dashboard-summary"],
     queryFn: getDashboardSummary,
+    enabled: !loginRequired || Boolean(session),
   });
 
   const remindersQuery = useQuery({
     queryKey: ["active-reminders"],
     queryFn: getActiveReminders,
+    enabled: !loginRequired || Boolean(session),
   });
 
   const generateRemindersMutation = useMutation({
@@ -85,55 +95,67 @@ function App() {
     },
   });
 
-  const engagementsQuery = useQuery({ queryKey: ["engagements"], queryFn: getEngagements });
-  const workstreamsQuery = useQuery({ queryKey: ["workstreams"], queryFn: getWorkstreams });
-  const deliverablesQuery = useQuery({ queryKey: ["deliverables"], queryFn: getDeliverables });
-  const tasksQuery = useQuery({ queryKey: ["tasks"], queryFn: getTasks });
-  const subtasksQuery = useQuery({ queryKey: ["subtasks"], queryFn: getSubtasks });
-  const dataPointsQuery = useQuery({ queryKey: ["data-points"], queryFn: getDataPoints });
+  const commonQueryEnabled = !loginRequired || Boolean(session);
+
+  const engagementsQuery = useQuery({ queryKey: ["engagements"], queryFn: getEngagements, enabled: commonQueryEnabled });
+  const workstreamsQuery = useQuery({ queryKey: ["workstreams"], queryFn: getWorkstreams, enabled: commonQueryEnabled });
+  const deliverablesQuery = useQuery({ queryKey: ["deliverables"], queryFn: getDeliverables, enabled: commonQueryEnabled });
+  const tasksQuery = useQuery({ queryKey: ["tasks"], queryFn: getTasks, enabled: commonQueryEnabled });
+  const subtasksQuery = useQuery({ queryKey: ["subtasks"], queryFn: getSubtasks, enabled: commonQueryEnabled });
+  const dataPointsQuery = useQuery({ queryKey: ["data-points"], queryFn: getDataPoints, enabled: commonQueryEnabled });
   const stakeholderQuestionsQuery = useQuery({
     queryKey: ["stakeholder-questions"],
     queryFn: getStakeholderQuestions,
+    enabled: commonQueryEnabled,
   });
-  const findingsQuery = useQuery({ queryKey: ["findings"], queryFn: getFindings });
+  const findingsQuery = useQuery({ queryKey: ["findings"], queryFn: getFindings, enabled: commonQueryEnabled });
   const analysisOutputsQuery = useQuery({
     queryKey: ["analysis-outputs"],
     queryFn: getAnalysisOutputs,
+    enabled: commonQueryEnabled,
   });
-  const evidenceItemsQuery = useQuery({ queryKey: ["evidence-items"], queryFn: getEvidenceItems });
-  const uploadedFilesQuery = useQuery({ queryKey: ["uploaded-files"], queryFn: getUploadedFiles });
+  const evidenceItemsQuery = useQuery({ queryKey: ["evidence-items"], queryFn: getEvidenceItems, enabled: commonQueryEnabled });
+  const uploadedFilesQuery = useQuery({ queryKey: ["uploaded-files"], queryFn: getUploadedFiles, enabled: commonQueryEnabled });
   const llmRecommendationsQuery = useQuery({
     queryKey: ["llm-recommendations"],
     queryFn: getLlmRecommendations,
+    enabled: commonQueryEnabled,
   });
   const llmRecommendationDecisionsQuery = useQuery({
     queryKey: ["llm-recommendation-decisions"],
     queryFn: getLlmRecommendationDecisions,
+    enabled: commonQueryEnabled,
   });
   const llmRecommendationRevisionsQuery = useQuery({
     queryKey: ["llm-recommendation-revisions"],
     queryFn: getLlmRecommendationRevisions,
+    enabled: commonQueryEnabled,
   });
   const llmRecommendationActionItemsQuery = useQuery({
     queryKey: ["llm-recommendation-action-items"],
     queryFn: getLlmRecommendationActionItems,
+    enabled: commonQueryEnabled,
   });
   const deliverableReviewsQuery = useQuery({
     queryKey: ["deliverable-reviews"],
     queryFn: getDeliverableReviews,
+    enabled: commonQueryEnabled,
   });
   const reviewWorkflowsQuery = useQuery({
     queryKey: ["deliverable-review-workflows"],
     queryFn: getDeliverableReviewWorkflows,
+    enabled: commonQueryEnabled,
   });
   const reviewActionItemsQuery = useQuery({
     queryKey: ["deliverable-review-action-items"],
     queryFn: getDeliverableReviewActionItems,
+    enabled: commonQueryEnabled,
   });
-  const timesheetsQuery = useQuery({ queryKey: ["timesheets"], queryFn: getTimesheets });
+  const timesheetsQuery = useQuery({ queryKey: ["timesheets"], queryFn: getTimesheets, enabled: commonQueryEnabled });
   const timesheetSummariesQuery = useQuery({
     queryKey: ["timesheet-summaries"],
     queryFn: getTimesheetSummaries,
+    enabled: commonQueryEnabled,
   });
 
   const summary = summaryQuery.data;
@@ -165,6 +187,31 @@ function App() {
     (item) => item.status.toLowerCase() !== "completed",
   );
 
+  if (loginRequired && !session) {
+    return (
+      <div className="app-shell login-only-shell">
+        <main className="main login-only-main">
+          <section id="dashboard" className="hero-card">
+            <div>
+              <p className="eyebrow">MVP 15B Login Required</p>
+              <h2>Please login to access ASM Engagement Cockpit.</h2>
+              <p>
+                The frontend is configured with VITE_APP_LOGIN_REQUIRED=true, so the cockpit
+                will load after a valid backend session token is created.
+              </p>
+            </div>
+            <div className="health-panel">
+              <span>Session</span>
+              <strong>Required</strong>
+            </div>
+          </section>
+
+          <Mvp15AuthPanel onSessionChange={setSession} />
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -178,6 +225,7 @@ function App() {
 
         <nav className="nav">
           <a href="#dashboard">Dashboard</a>
+          <a href="#auth-session">Login / Session</a>
           <a href="#runtime-config">Runtime Config</a>
           <a href="#role-based-views">Role-Based Views</a>
           <a href="#reminders">Reminders</a>
@@ -205,18 +253,20 @@ function App() {
       <main className="main">
         <section id="dashboard" className="hero-card">
           <div>
-            <p className="eyebrow">MVP 14B Frontend Runtime Configuration</p>
-            <h2>Frontend environment configuration and protected API headers are now available.</h2>
+            <p className="eyebrow">MVP 15B Frontend Login and Session Handling</p>
+            <h2>Frontend login and session-token support are now available.</h2>
             <p>
-              The cockpit now reads the backend API URL and optional API key settings from
-              frontend environment variables, and includes runtime diagnostics for safer operations.
+              The cockpit can now create a local session token from backend login,
+              store it in browser storage, and send it automatically on protected API calls.
             </p>
           </div>
           <div className="health-panel">
-            <span>Backend</span>
-            <strong>{summaryQuery.isError ? "Not connected" : "Connected"}</strong>
+            <span>Session</span>
+            <strong>{session ? "Available" : "Optional"}</strong>
           </div>
         </section>
+
+        <Mvp15AuthPanel onSessionChange={setSession} />
 
         <section className="summary-grid">
           <div className="summary-card"><span>Engagements</span><strong>{summary?.engagements ?? 0}</strong></div>
@@ -616,7 +666,7 @@ function App() {
         <section id="future" className="content-section">
           <h2>Future MVPs</h2>
           <div className="future-grid">
-            <div>Authentication login screen</div>
+            <div>User table and role-based backend permissions</div>
             <div>Audit, notifications, and collaboration workflow</div>
             <div>Deployment readiness and packaging</div>
             <div>Advanced reporting and charts</div>

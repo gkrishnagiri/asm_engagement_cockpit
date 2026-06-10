@@ -5,7 +5,12 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import get_settings
-from app.security import is_public_path
+from app.security import (
+    api_key_is_valid,
+    extract_bearer_token,
+    is_public_path,
+    session_token_is_valid,
+)
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
@@ -57,13 +62,20 @@ class ApiKeyProtectionMiddleware(BaseHTTPMiddleware):
                 status_code=500,
             )
 
-        api_key = request.headers.get("X-API-Key")
+        x_api_key = request.headers.get("X-API-Key")
 
-        if api_key != settings.api_auth_key:
-            return Response(
-                content='{"detail":"Missing or invalid API key."}',
-                media_type="application/json",
-                status_code=401,
-            )
+        if api_key_is_valid(x_api_key, settings):
+            return await call_next(request)
 
-        return await call_next(request)
+        x_session_token = request.headers.get("X-Session-Token")
+        bearer_token = extract_bearer_token(request.headers.get("Authorization"))
+        session_token = x_session_token or bearer_token
+
+        if session_token_is_valid(session_token, settings):
+            return await call_next(request)
+
+        return Response(
+            content='{"detail":"Missing or invalid API key or session token."}',
+            media_type="application/json",
+            status_code=401,
+        )

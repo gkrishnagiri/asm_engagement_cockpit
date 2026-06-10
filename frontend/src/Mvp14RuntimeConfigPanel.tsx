@@ -56,6 +56,8 @@ function FrontendConfigTable({ config }: { config: FrontendRuntimeConfig }) {
           <ConfigRow label="API Base URL" value={config.api_base_url} />
           <ConfigRow label="Frontend API Auth Enabled" value={config.api_auth_enabled} />
           <ConfigRow label="Frontend API Key Configured" value={config.api_auth_key_configured} />
+          <ConfigRow label="Login Required" value={config.app_login_required} />
+          <ConfigRow label="Session Token Configured" value={config.session_token_configured} />
         </tbody>
       </table>
     </div>
@@ -82,6 +84,10 @@ function BackendDiagnosticsTable({ diagnostics }: { diagnostics: RuntimeDiagnost
           <ConfigRow label="OpenAI API Key Configured" value={diagnostics.openai_api_key_configured} />
           <ConfigRow label="Backend API Auth Enabled" value={diagnostics.api_auth_enabled} />
           <ConfigRow label="Backend API Key Configured" value={diagnostics.api_auth_key_configured} />
+          <ConfigRow label="Backend Login Enabled" value={diagnostics.app_login_enabled} />
+          <ConfigRow label="Backend Login Configured" value={diagnostics.app_login_configured} />
+          <ConfigRow label="Backend Login Username" value={diagnostics.app_login_username} />
+          <ConfigRow label="Backend Session Duration Minutes" value={diagnostics.app_session_duration_minutes} />
           <ConfigRow label="Request Logging" value={diagnostics.log_requests} />
         </tbody>
       </table>
@@ -110,8 +116,8 @@ export function Mvp14RuntimeConfigPanel() {
         <div>
           <h2>Runtime Configuration and Diagnostics</h2>
           <p>
-            Validate frontend environment settings, backend diagnostics, OpenAI configuration,
-            request logging, CORS, and API key readiness.
+            Validate frontend environment settings, backend diagnostics, login readiness,
+            OpenAI configuration, request logging, CORS, and API key readiness.
           </p>
         </div>
         <StatusBadge status={backendStatus} />
@@ -125,9 +131,15 @@ export function Mvp14RuntimeConfigPanel() {
         </div>
 
         <div className="report-card">
-          <span>Frontend API Key</span>
-          <strong>{frontendConfig.api_auth_key_configured ? "Set" : "Not Set"}</strong>
-          <p>Controlled by VITE_API_AUTH_KEY</p>
+          <span>Login Required</span>
+          <strong>{frontendConfig.app_login_required ? "Yes" : "No"}</strong>
+          <p>Controlled by VITE_APP_LOGIN_REQUIRED</p>
+        </div>
+
+        <div className="report-card">
+          <span>Session Token</span>
+          <strong>{frontendConfig.session_token_configured ? "Set" : "Not Set"}</strong>
+          <p>Browser localStorage session</p>
         </div>
 
         <div className="report-card">
@@ -137,9 +149,9 @@ export function Mvp14RuntimeConfigPanel() {
         </div>
 
         <div className="report-card">
-          <span>Backend API Auth</span>
-          <strong>{diagnosticsQuery.data?.api_auth_enabled ? "On" : "Off"}</strong>
-          <p>Controlled by API_AUTH_ENABLED</p>
+          <span>Backend Login</span>
+          <strong>{diagnosticsQuery.data?.app_login_enabled ? "On" : "Off"}</strong>
+          <p>Controlled by APP_LOGIN_ENABLED</p>
         </div>
 
         <div className="report-card">
@@ -147,30 +159,24 @@ export function Mvp14RuntimeConfigPanel() {
           <strong>{diagnosticsQuery.data?.database_status ?? "-"}</strong>
           <p>Runtime connection check</p>
         </div>
-
-        <div className="report-card">
-          <span>OpenAI Tracing</span>
-          <strong>{diagnosticsQuery.data?.openai_tracing ? "On" : "Off"}</strong>
-          <p>Backend OpenAI trace setting</p>
-        </div>
       </div>
 
       <div className="timesheet-grid">
         <div className="timesheet-card">
           <h3>Frontend Runtime Settings</h3>
-          <p>These values come from Vite environment variables.</p>
+          <p>These values come from Vite environment variables and browser session storage.</p>
           <FrontendConfigTable config={frontendConfig} />
         </div>
 
         <div className="timesheet-card">
           <h3>Backend Runtime Diagnostics</h3>
-          <p>These values come from the protected diagnostics endpoint.</p>
+          <p>These values come from the diagnostics endpoint.</p>
 
           {diagnosticsQuery.isLoading ? (
             <div className="selected-context">Loading backend diagnostics...</div>
           ) : diagnosticsQuery.isError ? (
             <div className="dictation-message">
-              Could not load backend diagnostics. Check that the backend is running and that API key settings match.
+              Could not load backend diagnostics. Check that the backend is running and that API key/session settings match.
             </div>
           ) : diagnosticsQuery.data ? (
             <BackendDiagnosticsTable diagnostics={diagnosticsQuery.data} />
@@ -181,8 +187,8 @@ export function Mvp14RuntimeConfigPanel() {
       </div>
 
       <div className="selected-context content-section">
-        Keep frontend and backend auth disabled until both sides are configured. Later, set
-        backend API_AUTH_ENABLED=true and frontend VITE_API_AUTH_ENABLED=true with matching keys.
+        Recommended sequence: first validate login while API_AUTH_ENABLED=false. Then enable
+        backend API_AUTH_ENABLED=true and frontend VITE_API_AUTH_ENABLED=true only after the session flow works.
       </div>
     </section>
   );

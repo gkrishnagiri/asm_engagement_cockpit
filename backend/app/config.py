@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     api_auth_enabled: bool = False
     api_auth_key: str | None = None
 
+    app_login_enabled: bool = True
+    app_login_username: str = "giridhar"
+    app_login_password: str = "change_this_password"
+    app_login_display_name: str = "Giridhar Krishnagiri"
+    app_session_secret_key: str = "change_this_to_a_long_random_secret_value"
+    app_session_duration_minutes: int = 720
+
     log_requests: bool = True
 
     model_config = SettingsConfigDict(
@@ -52,6 +59,18 @@ class Settings(BaseSettings):
             return True
 
         return bool(self.api_auth_key and self.api_auth_key.strip())
+
+    @property
+    def login_is_ready(self) -> bool:
+        if not self.app_login_enabled:
+            return True
+
+        return bool(
+            self.app_login_username.strip()
+            and self.app_login_password.strip()
+            and self.app_session_secret_key.strip()
+            and self.app_session_secret_key != "change_this_to_a_long_random_secret_value"
+        )
 
 
 @lru_cache

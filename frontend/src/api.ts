@@ -28,6 +28,9 @@ import type {
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8020/api";
 const API_AUTH_ENABLED = String(import.meta.env.VITE_API_AUTH_ENABLED || "false").toLowerCase() === "true";
 const API_AUTH_KEY = import.meta.env.VITE_API_AUTH_KEY || "";
+const APP_LOGIN_REQUIRED = String(import.meta.env.VITE_APP_LOGIN_REQUIRED || "false").toLowerCase() === "true";
+
+const SESSION_STORAGE_KEY = "asm_engagement_cockpit_session";
 
 export type RuntimeDiagnostics = {
   app_name: string;
@@ -39,6 +42,10 @@ export type RuntimeDiagnostics = {
   openai_api_key_configured: boolean;
   api_auth_enabled: boolean;
   api_auth_key_configured: boolean;
+  app_login_enabled?: boolean;
+  app_login_configured?: boolean;
+  app_login_username?: string;
+  app_session_duration_minutes?: number;
   log_requests: boolean;
 };
 
@@ -46,7 +53,78 @@ export type FrontendRuntimeConfig = {
   api_base_url: string;
   api_auth_enabled: boolean;
   api_auth_key_configured: boolean;
+  app_login_required: boolean;
+  session_token_configured: boolean;
 };
+
+export type LoginResponse = {
+  access_token: string;
+  token_type: string;
+  username: string;
+  display_name: string;
+  expires_in_minutes: number;
+};
+
+export type AuthStatusResponse = {
+  authenticated: boolean;
+  auth_type: string;
+  username: string | null;
+  display_name: string | null;
+  expires_at: number | null;
+  expires_at_utc: string | null;
+};
+
+export type StoredSession = {
+  access_token: string;
+  token_type: string;
+  username: string;
+  display_name: string;
+  login_timestamp: string;
+  expires_in_minutes: number;
+};
+
+export function getStoredSession(): StoredSession | null {
+  const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw) as StoredSession;
+  } catch {
+    window.localStorage.removeItem(SESSION_STORAGE_KEY);
+    return null;
+  }
+}
+
+export function storeSession(loginResponse: LoginResponse): StoredSession {
+  const session: StoredSession = {
+    access_token: loginResponse.access_token,
+    token_type: loginResponse.token_type,
+    username: loginResponse.username,
+    display_name: loginResponse.display_name,
+    login_timestamp: new Date().toISOString(),
+    expires_in_minutes: loginResponse.expires_in_minutes,
+  };
+
+  window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+
+  return session;
+}
+
+export function clearStoredSession(): void {
+  window.localStorage.removeItem(SESSION_STORAGE_KEY);
+}
+
+export function isLoginRequired(): boolean {
+  return APP_LOGIN_REQUIRED;
+}
+
+function getStoredSessionToken(): string {
+  const session = getStoredSession();
+  return session?.access_token ?? "";
+}
 
 function buildHeaders(extraHeaders?: HeadersInit): HeadersInit {
   const headers: Record<string, string> = {
@@ -57,6 +135,13 @@ function buildHeaders(extraHeaders?: HeadersInit): HeadersInit {
     headers["X-API-Key"] = API_AUTH_KEY;
   }
 
+  const sessionToken = getStoredSessionToken();
+
+  if (sessionToken) {
+    headers.Authorization = `Bearer ${sessionToken}`;
+    headers["X-Session-Token"] = sessionToken;
+  }
+
   if (extraHeaders) {
     Object.assign(headers, extraHeaders);
   }
@@ -65,13 +150,20 @@ function buildHeaders(extraHeaders?: HeadersInit): HeadersInit {
 }
 
 function buildAuthHeaders(): HeadersInit {
+  const headers: Record<string, string> = {};
+
   if (API_AUTH_ENABLED && API_AUTH_KEY) {
-    return {
-      "X-API-Key": API_AUTH_KEY,
-    };
+    headers["X-API-Key"] = API_AUTH_KEY;
   }
 
-  return {};
+  const sessionToken = getStoredSessionToken();
+
+  if (sessionToken) {
+    headers.Authorization = `Bearer ${sessionToken}`;
+    headers["X-Session-Token"] = sessionToken;
+  }
+
+  return headers;
 }
 
 async function getJson<T>(path: string): Promise<T> {
@@ -137,7 +229,20 @@ export function getFrontendRuntimeConfig(): FrontendRuntimeConfig {
     api_base_url: API_BASE_URL,
     api_auth_enabled: API_AUTH_ENABLED,
     api_auth_key_configured: Boolean(API_AUTH_KEY),
+    app_login_required: APP_LOGIN_REQUIRED,
+    session_token_configured: Boolean(getStoredSessionToken()),
   };
+}
+
+export function login(payload: {
+  username: string;
+  password: string;
+}): Promise<LoginResponse> {
+  return postJson<LoginResponse>("/auth/login", payload);
+}
+
+export function getAuthStatus(): Promise<AuthStatusResponse> {
+  return getJson<AuthStatusResponse>("/auth/status");
 }
 
 export function getRuntimeDiagnostics(): Promise<RuntimeDiagnostics> {
