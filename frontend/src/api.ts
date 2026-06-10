@@ -25,13 +25,63 @@ import type {
   Workstream,
 } from "./types";
 
-const API_BASE_URL = "http://localhost:8020/api";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8020/api";
+const API_AUTH_ENABLED = String(import.meta.env.VITE_API_AUTH_ENABLED || "false").toLowerCase() === "true";
+const API_AUTH_KEY = import.meta.env.VITE_API_AUTH_KEY || "";
+
+export type RuntimeDiagnostics = {
+  app_name: string;
+  app_env: string;
+  database_status: string;
+  cors_origins: string[];
+  openai_model: string;
+  openai_tracing: boolean;
+  openai_api_key_configured: boolean;
+  api_auth_enabled: boolean;
+  api_auth_key_configured: boolean;
+  log_requests: boolean;
+};
+
+export type FrontendRuntimeConfig = {
+  api_base_url: string;
+  api_auth_enabled: boolean;
+  api_auth_key_configured: boolean;
+};
+
+function buildHeaders(extraHeaders?: HeadersInit): HeadersInit {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (API_AUTH_ENABLED && API_AUTH_KEY) {
+    headers["X-API-Key"] = API_AUTH_KEY;
+  }
+
+  if (extraHeaders) {
+    Object.assign(headers, extraHeaders);
+  }
+
+  return headers;
+}
+
+function buildAuthHeaders(): HeadersInit {
+  if (API_AUTH_ENABLED && API_AUTH_KEY) {
+    return {
+      "X-API-Key": API_AUTH_KEY,
+    };
+  }
+
+  return {};
+}
 
 async function getJson<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`);
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: buildAuthHeaders(),
+  });
 
   if (!response.ok) {
-    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    const errorText = await response.text();
+    throw new Error(`API request failed: ${response.status} ${response.statusText}. ${errorText}`);
   }
 
   return response.json() as Promise<T>;
@@ -40,9 +90,7 @@ async function getJson<T>(path: string): Promise<T> {
 async function postJson<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildHeaders(),
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 
@@ -57,9 +105,7 @@ async function postJson<T>(path: string, body?: unknown): Promise<T> {
 async function putJson<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: buildHeaders(),
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 
@@ -74,14 +120,28 @@ async function putJson<T>(path: string, body?: unknown): Promise<T> {
 async function postFormData<T>(path: string, formData: FormData): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
+    headers: buildAuthHeaders(),
     body: formData,
   });
 
   if (!response.ok) {
-    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    const errorText = await response.text();
+    throw new Error(`API request failed: ${response.status} ${response.statusText}. ${errorText}`);
   }
 
   return response.json() as Promise<T>;
+}
+
+export function getFrontendRuntimeConfig(): FrontendRuntimeConfig {
+  return {
+    api_base_url: API_BASE_URL,
+    api_auth_enabled: API_AUTH_ENABLED,
+    api_auth_key_configured: Boolean(API_AUTH_KEY),
+  };
+}
+
+export function getRuntimeDiagnostics(): Promise<RuntimeDiagnostics> {
+  return getJson<RuntimeDiagnostics>("/diagnostics/runtime");
 }
 
 export function getDashboardSummary(): Promise<DashboardSummary> {

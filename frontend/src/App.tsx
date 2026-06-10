@@ -33,6 +33,7 @@ import { Mvp10TimesheetPanel } from "./Mvp10TimesheetPanel";
 import { Mvp11ReviewWorkflowPanel } from "./Mvp11ReviewWorkflowPanel";
 import { Mvp12RecommendationManagementPanel } from "./Mvp12RecommendationManagementPanel";
 import { Mvp13RoleBasedViewsPanel } from "./Mvp13RoleBasedViewsPanel";
+import { Mvp14RuntimeConfigPanel } from "./Mvp14RuntimeConfigPanel";
 
 function StatusBadge({ status }: { status: string }) {
   return <span className="status-badge">{status}</span>;
@@ -177,6 +178,7 @@ function App() {
 
         <nav className="nav">
           <a href="#dashboard">Dashboard</a>
+          <a href="#runtime-config">Runtime Config</a>
           <a href="#role-based-views">Role-Based Views</a>
           <a href="#reminders">Reminders</a>
           <a href="#engagements">Engagements</a>
@@ -203,11 +205,11 @@ function App() {
       <main className="main">
         <section id="dashboard" className="hero-card">
           <div>
-            <p className="eyebrow">MVP 13 Role-Based Views and Filters</p>
-            <h2>Role-focused cockpit views and health filters are now available.</h2>
+            <p className="eyebrow">MVP 14B Frontend Runtime Configuration</p>
+            <h2>Frontend environment configuration and protected API headers are now available.</h2>
             <p>
-              The cockpit now supports frontend role-based views for engagement leadership,
-              delivery ownership, review/approval, data gathering, and automation advisory.
+              The cockpit now reads the backend API URL and optional API key settings from
+              frontend environment variables, and includes runtime diagnostics for safer operations.
             </p>
           </div>
           <div className="health-panel">
@@ -238,6 +240,8 @@ function App() {
           <div className="summary-card review-summary-card"><span>Review Workflows</span><strong>{reviewWorkflows.length}</strong></div>
           <div className="summary-card review-summary-card"><span>Open Review Actions</span><strong>{openReviewActions.length}</strong></div>
         </section>
+
+        <Mvp14RuntimeConfigPanel />
 
         <Mvp13RoleBasedViewsPanel
           workstreams={workstreams}
@@ -612,7 +616,7 @@ function App() {
         <section id="future" className="content-section">
           <h2>Future MVPs</h2>
           <div className="future-grid">
-            <div>Production hardening and authentication</div>
+            <div>Authentication login screen</div>
             <div>Audit, notifications, and collaboration workflow</div>
             <div>Deployment readiness and packaging</div>
             <div>Advanced reporting and charts</div>

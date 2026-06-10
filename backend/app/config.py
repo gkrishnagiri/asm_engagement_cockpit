@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     openai_tracing: bool = True
     openai_model: str = "gpt-4.1-mini"
 
+    api_auth_enabled: bool = False
+    api_auth_key: str | None = None
+
+    log_requests: bool = True
+
     model_config = SettingsConfigDict(
         env_file=str(BACKEND_ROOT / ".env"),
         env_file_encoding="utf-8",
@@ -36,6 +41,17 @@ class Settings(BaseSettings):
             for origin in self.backend_cors_origins.split(",")
             if origin.strip()
         ]
+
+    @property
+    def is_local(self) -> bool:
+        return self.app_env.strip().lower() in {"local", "dev", "development"}
+
+    @property
+    def auth_is_ready(self) -> bool:
+        if not self.api_auth_enabled:
+            return True
+
+        return bool(self.api_auth_key and self.api_auth_key.strip())
 
 
 @lru_cache

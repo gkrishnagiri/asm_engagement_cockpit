@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import create_database_tables, get_db
+from app.middleware import ApiKeyProtectionMiddleware, RequestLoggingMiddleware
 from app.models import (
     DataPoint,
     DateRevisionHistory,
@@ -55,6 +56,7 @@ from app.mvp6_refinement_router import router as mvp6_refinement_router
 from app.mvp10_timesheets_router import router as mvp10_timesheets_router
 from app.mvp11_review_workflow_router import router as mvp11_review_workflow_router
 from app.mvp12_recommendation_management_router import router as mvp12_recommendation_management_router
+from app.mvp14_diagnostics_router import router as mvp14_diagnostics_router
 
 settings = get_settings()
 
@@ -62,6 +64,9 @@ app = FastAPI(
     title=settings.app_name,
     version="0.4.0",
 )
+
+app.add_middleware(ApiKeyProtectionMiddleware)
+app.add_middleware(RequestLoggingMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -76,6 +81,7 @@ app.include_router(mvp6_refinement_router)
 app.include_router(mvp10_timesheets_router)
 app.include_router(mvp11_review_workflow_router)
 app.include_router(mvp12_recommendation_management_router)
+app.include_router(mvp14_diagnostics_router)
 
 COMPLETED_STATUS = "Completed"
 REMINDER_LOOKAHEAD_DAYS = 7
