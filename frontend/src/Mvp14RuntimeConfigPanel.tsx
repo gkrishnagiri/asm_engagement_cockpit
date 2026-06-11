@@ -6,6 +6,7 @@ import {
   type FrontendRuntimeConfig,
   type RuntimeDiagnostics,
 } from "./api";
+import { Mvp16OperationsPanel } from "./Mvp16OperationsPanel";
 
 function yesNo(value: boolean) {
   return value ? "Yes" : "No";
@@ -111,85 +112,89 @@ export function Mvp14RuntimeConfigPanel() {
       : "Diagnostics OK";
 
   return (
-    <section id="runtime-config" className="content-section">
-      <div className="section-header">
-        <div>
-          <h2>Runtime Configuration and Diagnostics</h2>
-          <p>
-            Validate frontend environment settings, backend diagnostics, login readiness,
-            OpenAI configuration, request logging, CORS, and API key readiness.
-          </p>
-        </div>
-        <StatusBadge status={backendStatus} />
-      </div>
-
-      <div className="report-summary-grid">
-        <div className="report-card">
-          <span>Frontend API Auth</span>
-          <strong>{frontendConfig.api_auth_enabled ? "On" : "Off"}</strong>
-          <p>Controlled by VITE_API_AUTH_ENABLED</p>
+    <>
+      <section id="runtime-config" className="content-section">
+        <div className="section-header">
+          <div>
+            <h2>Runtime Configuration and Diagnostics</h2>
+            <p>
+              Validate frontend environment settings, backend diagnostics, login readiness,
+              OpenAI configuration, request logging, CORS, and API key readiness.
+            </p>
+          </div>
+          <StatusBadge status={backendStatus} />
         </div>
 
-        <div className="report-card">
-          <span>Login Required</span>
-          <strong>{frontendConfig.app_login_required ? "Yes" : "No"}</strong>
-          <p>Controlled by VITE_APP_LOGIN_REQUIRED</p>
+        <div className="report-summary-grid">
+          <div className="report-card">
+            <span>Frontend API Auth</span>
+            <strong>{frontendConfig.api_auth_enabled ? "On" : "Off"}</strong>
+            <p>Controlled by VITE_API_AUTH_ENABLED</p>
+          </div>
+
+          <div className="report-card">
+            <span>Login Required</span>
+            <strong>{frontendConfig.app_login_required ? "Yes" : "No"}</strong>
+            <p>Controlled by VITE_APP_LOGIN_REQUIRED</p>
+          </div>
+
+          <div className="report-card">
+            <span>Session Token</span>
+            <strong>{frontendConfig.session_token_configured ? "Set" : "Not Set"}</strong>
+            <p>Browser localStorage session</p>
+          </div>
+
+          <div className="report-card">
+            <span>Backend Diagnostics</span>
+            <strong>{diagnosticsQuery.data ? "OK" : diagnosticsQuery.isError ? "Error" : "Loading"}</strong>
+            <p>Reads /api/diagnostics/runtime</p>
+          </div>
+
+          <div className="report-card">
+            <span>Backend Login</span>
+            <strong>{diagnosticsQuery.data?.app_login_enabled ? "On" : "Off"}</strong>
+            <p>Controlled by APP_LOGIN_ENABLED</p>
+          </div>
+
+          <div className="report-card">
+            <span>Database</span>
+            <strong>{diagnosticsQuery.data?.database_status ?? "-"}</strong>
+            <p>Runtime connection check</p>
+          </div>
         </div>
 
-        <div className="report-card">
-          <span>Session Token</span>
-          <strong>{frontendConfig.session_token_configured ? "Set" : "Not Set"}</strong>
-          <p>Browser localStorage session</p>
+        <div className="timesheet-grid">
+          <div className="timesheet-card">
+            <h3>Frontend Runtime Settings</h3>
+            <p>These values come from Vite environment variables and browser session storage.</p>
+            <FrontendConfigTable config={frontendConfig} />
+          </div>
+
+          <div className="timesheet-card">
+            <h3>Backend Runtime Diagnostics</h3>
+            <p>These values come from the diagnostics endpoint.</p>
+
+            {diagnosticsQuery.isLoading ? (
+              <div className="selected-context">Loading backend diagnostics...</div>
+            ) : diagnosticsQuery.isError ? (
+              <div className="dictation-message">
+                Could not load backend diagnostics. Check that the backend is running and that API key/session settings match.
+              </div>
+            ) : diagnosticsQuery.data ? (
+              <BackendDiagnosticsTable diagnostics={diagnosticsQuery.data} />
+            ) : (
+              <div className="selected-context">No diagnostics returned.</div>
+            )}
+          </div>
         </div>
 
-        <div className="report-card">
-          <span>Backend Diagnostics</span>
-          <strong>{diagnosticsQuery.data ? "OK" : diagnosticsQuery.isError ? "Error" : "Loading"}</strong>
-          <p>Reads /api/diagnostics/runtime</p>
+        <div className="selected-context content-section">
+          Recommended sequence: validate login while API_AUTH_ENABLED=false. Then enable
+          backend API_AUTH_ENABLED=true and frontend VITE_API_AUTH_ENABLED=true only after the session flow works.
         </div>
+      </section>
 
-        <div className="report-card">
-          <span>Backend Login</span>
-          <strong>{diagnosticsQuery.data?.app_login_enabled ? "On" : "Off"}</strong>
-          <p>Controlled by APP_LOGIN_ENABLED</p>
-        </div>
-
-        <div className="report-card">
-          <span>Database</span>
-          <strong>{diagnosticsQuery.data?.database_status ?? "-"}</strong>
-          <p>Runtime connection check</p>
-        </div>
-      </div>
-
-      <div className="timesheet-grid">
-        <div className="timesheet-card">
-          <h3>Frontend Runtime Settings</h3>
-          <p>These values come from Vite environment variables and browser session storage.</p>
-          <FrontendConfigTable config={frontendConfig} />
-        </div>
-
-        <div className="timesheet-card">
-          <h3>Backend Runtime Diagnostics</h3>
-          <p>These values come from the diagnostics endpoint.</p>
-
-          {diagnosticsQuery.isLoading ? (
-            <div className="selected-context">Loading backend diagnostics...</div>
-          ) : diagnosticsQuery.isError ? (
-            <div className="dictation-message">
-              Could not load backend diagnostics. Check that the backend is running and that API key/session settings match.
-            </div>
-          ) : diagnosticsQuery.data ? (
-            <BackendDiagnosticsTable diagnostics={diagnosticsQuery.data} />
-          ) : (
-            <div className="selected-context">No diagnostics returned.</div>
-          )}
-        </div>
-      </div>
-
-      <div className="selected-context content-section">
-        Recommended sequence: first validate login while API_AUTH_ENABLED=false. Then enable
-        backend API_AUTH_ENABLED=true and frontend VITE_API_AUTH_ENABLED=true only after the session flow works.
-      </div>
-    </section>
+      <Mvp16OperationsPanel />
+    </>
   );
 }
