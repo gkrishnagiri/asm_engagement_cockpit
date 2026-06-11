@@ -1,679 +1,954 @@
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+
+import "./styles.css";
+import "./mvp18Simplified.css";
 
 import {
-  generateReminders,
-  getActiveReminders,
-  getAnalysisOutputs,
-  getDashboardSummary,
-  getDataPoints,
-  getDeliverableReviewActionItems,
-  getDeliverableReviewWorkflows,
-  getDeliverableReviews,
-  getDeliverables,
+  clearStoredSession,
+  createDeliverable,
+  createEngagement,
+  createSubtask,
+  createTask,
+  createWorkstream,
+  deleteDeliverable,
+  deleteEngagement,
+  deleteSubtask,
+  deleteTask,
+  deleteWorkstream,
+  getDashboardStatusSummary,
+  getDeliverableWorkspace,
   getEngagements,
-  getEvidenceItems,
-  getFindings,
-  getLlmRecommendationActionItems,
-  getLlmRecommendationDecisions,
-  getLlmRecommendationRevisions,
-  getLlmRecommendations,
-  getStakeholderQuestions,
+  getEngagementWorkspace,
+  getReminderIndicator,
   getStoredSession,
-  getSubtasks,
-  getTasks,
-  getTimesheetSummaries,
-  getTimesheets,
-  getUploadedFiles,
-  getWorkstreams,
+  getSubtaskWorkspace,
+  getTaskWorkspace,
+  getWorkstreamWorkspace,
   isLoginRequired,
+  login,
+  storeSession,
+  updateDeliverable,
+  updateEngagement,
+  updateSubtask,
+  updateTask,
+  updateWorkstream,
+  type BreadcrumbItem,
+  type DashboardStatusSummary,
+  type DeliverableWorkspace,
+  type EngagementWorkspace,
+  type EntitySummary,
+  type HierarchyFormPayload,
+  type ReminderIndicator,
+  type StatusBucket,
   type StoredSession,
-} from "./api";
-import { Mvp6CaptureWorkspace } from "./Mvp6CaptureWorkspace";
-import { Mvp7FileUploadPanel } from "./Mvp7FileUploadPanel";
-import { Mvp8LlmPanel } from "./Mvp8LlmPanel";
-import { Mvp9ReportsPanel } from "./Mvp9ReportsPanel";
-import { Mvp10TimesheetPanel } from "./Mvp10TimesheetPanel";
-import { Mvp11ReviewWorkflowPanel } from "./Mvp11ReviewWorkflowPanel";
-import { Mvp12RecommendationManagementPanel } from "./Mvp12RecommendationManagementPanel";
-import { Mvp13RoleBasedViewsPanel } from "./Mvp13RoleBasedViewsPanel";
-import { Mvp14RuntimeConfigPanel } from "./Mvp14RuntimeConfigPanel";
-import { Mvp15AuthPanel } from "./Mvp15AuthPanel";
+  type SubtaskWorkspace,
+  type TaskWorkspace,
+  type WorkstreamWorkspace,
+} from "./mvp18UiApi";
+import { Mvp18WorkspacePanel } from "./Mvp18WorkspacePanel";
 
-function StatusBadge({ status }: { status: string }) {
-  return <span className="status-badge">{status}</span>;
+type RouteState = {
+  path: string;
+  parts: string[];
+};
+
+type EntityKind = "engagement" | "workstream" | "deliverable" | "task" | "subtask";
+
+type FormMode = "create" | "edit";
+
+type FormState = {
+  mode: FormMode;
+  entityKind: EntityKind;
+  parentId?: string;
+  item?: EntitySummary;
+};
+
+const STATUS_OPTIONS = [
+  "Not Started",
+  "In Progress",
+  "On Hold - Waiting for Information",
+  "On Hold - Dependency",
+  "Submitted for Review",
+  "Rework Required",
+  "Completed",
+  "Cancelled",
+];
+
+function normalizePath(): RouteState {
+  const hash = window.location.hash.replace(/^#/, "");
+  const path = hash.startsWith("/") ? hash : "/";
+  const parts = path.split("/").filter(Boolean);
+  return { path, parts };
 }
 
-function ReminderBadge({ status }: { status: string }) {
-  const normalized = status.toLowerCase().replaceAll(" ", "-");
-  return <span className={`reminder-badge reminder-${normalized}`}>{status}</span>;
+function navigateTo(path: string) {
+  window.location.hash = path;
 }
 
-function ParentTypeBadge({ parentType }: { parentType: string }) {
-  const labelMap: Record<string, string> = {
-    deliverable: "Deliverable",
-    task: "Task",
-    subtask: "Sub-task",
-    data_point: "Data Point",
-    stakeholder_question: "Stakeholder Question",
-  };
-
-  return <span className="parent-type">{labelMap[parentType] ?? parentType}</span>;
+function entityLabel(item: EntitySummary): string {
+  return item.name || item.title || item.external_id || item.id;
 }
 
-function formatDate(value: string | null) {
+function shortId(id: string): string {
+  return id.slice(0, 8);
+}
+
+function formatDate(value: string | null | undefined): string {
   return value || "-";
 }
 
-function yesNo(value: boolean) {
-  return value ? "Yes" : "No";
+function statusClassText(bucket: StatusBucket): string {
+  return `Not Started: ${bucket.not_started} | In Progress: ${bucket.in_progress} | On Hold: ${bucket.on_hold} | Completed: ${bucket.completed}`;
+}
+
+function StatusBadge({ status }: { status?: string | null }) {
+  return <span className="mvp18-status-badge">{status || "No Status"}</span>;
+}
+
+function LoadingPanel({ label = "Loading..." }: { label?: string }) {
+  return <div className="mvp18-panel">{label}</div>;
+}
+
+function ErrorPanel({ error }: { error: unknown }) {
+  const message = error instanceof Error ? error.message : "Unknown error";
+  return <div className="mvp18-error">{message}</div>;
+}
+
+function EmptyPanel({ label }: { label: string }) {
+  return <div className="mvp18-empty">{label}</div>;
+}
+
+function LoginPage({ onLogin }: { onLogin: (session: StoredSession) => void }) {
+  const [username, setUsername] = useState("giridhar");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+
+  const loginMutation = useMutation({
+    mutationFn: login,
+    onSuccess: (response) => {
+      const session = storeSession(response);
+      setMessage("");
+      onLogin(session);
+      navigateTo("/");
+    },
+    onError: (error) => {
+      setMessage(error instanceof Error ? error.message : "Login failed.");
+    },
+  });
+
+  return (
+    <div className="mvp18-login-page">
+      <div className="mvp18-login-card">
+        <h1>ASM Engagement Cockpit</h1>
+        <p>Sign in to continue to the cockpit workspace.</p>
+
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            loginMutation.mutate({ username, password });
+          }}
+        >
+          <label>
+            Username
+            <input value={username} onChange={(event) => setUsername(event.target.value)} autoFocus />
+          </label>
+
+          <label>
+            Password
+            <input value={password} type="password" onChange={(event) => setPassword(event.target.value)} />
+          </label>
+
+          <button className="mvp18-button-primary" type="submit" disabled={loginMutation.isPending}>
+            {loginMutation.isPending ? "Signing in..." : "Login"}
+          </button>
+
+          {message ? <div className="mvp18-error">{message}</div> : null}
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function ReminderButton({ indicator }: { indicator?: ReminderIndicator }) {
+  const color = indicator?.color || "gray";
+  const count = indicator?.total_active ?? 0;
+  const label = indicator?.label || "No active reminders";
+
+  return (
+    <button
+      className={`mvp18-reminder-button mvp18-reminder-${color}`}
+      title={label}
+      onClick={() => {
+        alert(
+          `Reminders\n\nTotal active: ${count}\nOverdue: ${indicator?.overdue ?? 0}\nDue within 2 days: ${indicator?.due_within_2_days ?? 0}\nOther active: ${indicator?.other_active ?? 0}`,
+        );
+      }}
+    >
+      🔔 {count}
+    </button>
+  );
+}
+
+function AppShell({
+  children,
+  session,
+  setSession,
+  breadcrumb,
+}: {
+  children: React.ReactNode;
+  session: StoredSession | null;
+  setSession: (session: StoredSession | null) => void;
+  breadcrumb: BreadcrumbItem[];
+}) {
+  const reminderQuery = useQuery({
+    queryKey: ["mvp18-reminder-indicator"],
+    queryFn: getReminderIndicator,
+    refetchInterval: 60000,
+    retry: 1,
+  });
+
+  const currentPath = normalizePath().path;
+  const navItems = [
+    { label: "Dashboard", path: "/" },
+    { label: "Engagements", path: "/engagements" },
+    { label: "My Work", path: "/tasks" },
+    { label: "Reminders", path: "/reminders" },
+    { label: "Reports", path: "/reports" },
+    { label: "Operations", path: "/operations" },
+    { label: "Settings", path: "/settings" },
+  ];
+
+  return (
+    <div className="mvp18-shell">
+      <aside className="mvp18-sidebar">
+        <div className="mvp18-brand">ASM Cockpit</div>
+        <nav className="mvp18-nav">
+          {navItems.map((item) => (
+            <button
+              key={item.path}
+              className={currentPath === item.path ? "active" : ""}
+              onClick={() => navigateTo(item.path)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      </aside>
+
+      <main className="mvp18-main">
+        <header className="mvp18-topbar">
+          <div className="mvp18-breadcrumb">
+            <strong>ASM Engagement Cockpit</strong>
+            {breadcrumb.length > 0 ? ` / ${breadcrumb.map((item) => item.label).join(" / ")}` : " / Dashboard"}
+          </div>
+
+          <div className="mvp18-top-actions">
+            <ReminderButton indicator={reminderQuery.data} />
+            <span>{session?.display_name || "Local User"}</span>
+            <button
+              className="mvp18-button-secondary"
+              onClick={() => {
+                clearStoredSession();
+                setSession(null);
+                navigateTo("/login");
+              }}
+            >
+              Logout
+            </button>
+          </div>
+        </header>
+
+        <div className="mvp18-content">{children}</div>
+      </main>
+    </div>
+  );
+}
+
+function SummaryCard({ title, bucket, path }: { title: string; bucket: StatusBucket; path: string }) {
+  return (
+    <button className="mvp18-summary-card" onClick={() => navigateTo(path)}>
+      <span>{title}</span>
+      <strong>{bucket.total}</strong>
+      <div className="mvp18-status-row">
+        <div>{statusClassText(bucket)}</div>
+        {bucket.other > 0 ? <div>Other: {bucket.other}</div> : null}
+      </div>
+    </button>
+  );
+}
+
+function DashboardPage() {
+  const summaryQuery = useQuery({
+    queryKey: ["mvp18-dashboard-status-summary"],
+    queryFn: getDashboardStatusSummary,
+    retry: 1,
+  });
+
+  if (summaryQuery.isLoading) {
+    return <LoadingPanel label="Loading dashboard summary..." />;
+  }
+
+  if (summaryQuery.isError) {
+    return <ErrorPanel error={summaryQuery.error} />;
+  }
+
+  const summary = summaryQuery.data as DashboardStatusSummary;
+
+  return (
+    <>
+      <div className="mvp18-page-header">
+        <div>
+          <h1>Dashboard</h1>
+          <p>Clean executive view of engagement hierarchy and status counts.</p>
+        </div>
+      </div>
+
+      <div className="mvp18-card-grid">
+        <SummaryCard title="Engagements" bucket={summary.engagements} path="/engagements" />
+        <SummaryCard title="Workstreams" bucket={summary.workstreams} path="/engagements" />
+        <SummaryCard title="Deliverables" bucket={summary.deliverables} path="/engagements" />
+        <SummaryCard title="Tasks" bucket={summary.tasks} path="/tasks" />
+        <SummaryCard title="Sub-tasks" bucket={summary.subtasks} path="/tasks" />
+      </div>
+    </>
+  );
+}
+
+function EntityCard({
+  item,
+  viewLabel,
+  onView,
+  onEdit,
+  onDelete,
+  deleteLabel,
+}: {
+  item: EntitySummary;
+  viewLabel: string;
+  onView: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  deleteLabel: string;
+}) {
+  return (
+    <div className="mvp18-entity-card">
+      <div>
+        <h3>{entityLabel(item)}</h3>
+        <div className="mvp18-entity-meta">
+          {item.external_id ? <span>ID: {item.external_id}</span> : <span>Record: {shortId(item.id)}</span>}
+          <StatusBadge status={item.status} />
+          <span>Owner: {item.owner_name || "-"}</span>
+          <span>Target: {formatDate(item.target_date)}</span>
+          <span>Progress: {item.progress_percent ?? 0}%</span>
+        </div>
+        {item.description ? <p>{item.description}</p> : null}
+      </div>
+
+      <div className="mvp18-actions">
+        <button className="mvp18-button-primary" onClick={onView}>{viewLabel}</button>
+        <button className="mvp18-button-secondary" onClick={onEdit}>Change</button>
+        <button className="mvp18-button-danger" onClick={onDelete}>{deleteLabel}</button>
+      </div>
+    </div>
+  );
+}
+
+function HierarchyFormModal({
+  state,
+  onClose,
+  onSubmit,
+}: {
+  state: FormState;
+  onClose: () => void;
+  onSubmit: (payload: HierarchyFormPayload) => void;
+}) {
+  const isTitleBased = state.entityKind === "task" || state.entityKind === "subtask";
+  const item = state.item;
+
+  const [externalId, setExternalId] = useState(item?.external_id || "");
+  const [label, setLabel] = useState(isTitleBased ? item?.title || "" : item?.name || "");
+  const [description, setDescription] = useState(item?.description || "");
+  const [status, setStatus] = useState(item?.status || "Not Started");
+  const [priority, setPriority] = useState(item?.priority || "");
+  const [ownerName, setOwnerName] = useState(item?.owner_name || "");
+  const [startDate, setStartDate] = useState(item?.start_date || "");
+  const [targetDate, setTargetDate] = useState(item?.target_date || "");
+
+  const title = `${state.mode === "create" ? "Add" : "Change"} ${state.entityKind}`;
+
+  return (
+    <div className="mvp18-modal-backdrop">
+      <div className="mvp18-modal">
+        <h2>{title}</h2>
+
+        <form
+          className="mvp18-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const payload: HierarchyFormPayload = {
+              external_id: externalId || null,
+              description: description || null,
+              status,
+              priority: priority || null,
+              owner_name: ownerName || null,
+              start_date: startDate || null,
+            };
+
+            if (isTitleBased) {
+              payload.title = label;
+              payload.target_completion_date = targetDate || null;
+            } else if (state.entityKind === "engagement") {
+              payload.name = label;
+              payload.target_end_date = targetDate || null;
+            } else {
+              payload.name = label;
+              payload.target_completion_date = targetDate || null;
+            }
+
+            onSubmit(payload);
+          }}
+        >
+          <div className="mvp18-form-grid">
+            {state.entityKind !== "engagement" ? (
+              <label>
+                External ID
+                <input value={externalId} onChange={(event) => setExternalId(event.target.value)} />
+              </label>
+            ) : null}
+
+            <label>
+              {isTitleBased ? "Title" : "Name"}
+              <input value={label} onChange={(event) => setLabel(event.target.value)} required />
+            </label>
+
+            <label>
+              Status
+              <select value={status} onChange={(event) => setStatus(event.target.value)}>
+                {STATUS_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+
+            {(state.entityKind === "task" || state.entityKind === "subtask") ? (
+              <label>
+                Priority
+                <input value={priority} onChange={(event) => setPriority(event.target.value)} />
+              </label>
+            ) : null}
+
+            <label>
+              Owner
+              <input value={ownerName} onChange={(event) => setOwnerName(event.target.value)} />
+            </label>
+
+            <label>
+              Start Date
+              <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+            </label>
+
+            <label>
+              Target Date
+              <input type="date" value={targetDate} onChange={(event) => setTargetDate(event.target.value)} />
+            </label>
+          </div>
+
+          <label>
+            Description
+            <textarea value={description} rows={4} onChange={(event) => setDescription(event.target.value)} />
+          </label>
+
+          <div className="mvp18-actions">
+            <button className="mvp18-button-secondary" type="button" onClick={onClose}>Cancel</button>
+            <button className="mvp18-button-primary" type="submit">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function EngagementsPage({ setFormState }: { setFormState: (state: FormState | null) => void }) {
+  const queryClient = useQueryClient();
+  const engagementsQuery = useQuery({ queryKey: ["mvp18-engagements"], queryFn: getEngagements, retry: 1 });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteEngagement,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mvp18-engagements"] });
+      queryClient.invalidateQueries({ queryKey: ["mvp18-dashboard-status-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["mvp18-reminder-indicator"] });
+    },
+  });
+
+  if (engagementsQuery.isLoading) return <LoadingPanel label="Loading engagements..." />;
+  if (engagementsQuery.isError) return <ErrorPanel error={engagementsQuery.error} />;
+
+  const items = engagementsQuery.data ?? [];
+
+  return (
+    <>
+      <div className="mvp18-page-header">
+        <div>
+          <h1>Engagements</h1>
+          <p>Select an engagement to see its related workstreams.</p>
+        </div>
+      </div>
+
+      <div className="mvp18-list">
+        {items.length === 0 ? <EmptyPanel label="No engagements yet." /> : null}
+        {items.map((item) => (
+          <EntityCard
+            key={item.id}
+            item={item}
+            viewLabel="View"
+            deleteLabel="Delete"
+            onView={() => navigateTo(`/engagements/${item.id}`)}
+            onEdit={() => setFormState({ mode: "edit", entityKind: "engagement", item })}
+            onDelete={() => {
+              const ok = window.confirm(
+                "Are you sure you want to delete this engagement?\n\nThis will delete related workstreams, deliverables, tasks, sub-tasks, workspace records, files, reminders, and recommendations.\n\nThis action cannot be undone.",
+              );
+              if (ok) deleteMutation.mutate(item.id);
+            }}
+          />
+        ))}
+      </div>
+
+      <div className="mvp18-panel">
+        <button className="mvp18-button-primary" onClick={() => setFormState({ mode: "create", entityKind: "engagement" })}>
+          Add Engagement
+        </button>
+      </div>
+    </>
+  );
+}
+
+function EngagementDetailPage({ id, setFormState }: { id: string; setFormState: (state: FormState | null) => void }) {
+  const queryClient = useQueryClient();
+  const query = useQuery({ queryKey: ["mvp18-engagement-workspace", id], queryFn: () => getEngagementWorkspace(id), retry: 1 });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteWorkstream,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mvp18-engagement-workspace", id] });
+      queryClient.invalidateQueries({ queryKey: ["mvp18-dashboard-status-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["mvp18-reminder-indicator"] });
+    },
+  });
+
+  if (query.isLoading) return <LoadingPanel label="Loading engagement workspace..." />;
+  if (query.isError) return <ErrorPanel error={query.error} />;
+
+  const workspace = query.data as EngagementWorkspace;
+
+  return (
+    <HierarchyChildrenPage
+      title={entityLabel(workspace.engagement)}
+      subtitle="Workstreams for this engagement."
+      childrenLabel="Workstreams"
+      items={workspace.workstreams}
+      emptyLabel="No workstreams yet."
+      addLabel="Add Workstream"
+      viewLabel="View"
+      onAdd={() => setFormState({ mode: "create", entityKind: "workstream", parentId: workspace.engagement.id })}
+      onView={(item) => navigateTo(`/workstreams/${item.id}`)}
+      onEdit={(item) => setFormState({ mode: "edit", entityKind: "workstream", item })}
+      onDelete={(item) => {
+        const ok = window.confirm(
+          "Are you sure you want to delete this workstream?\n\nThis will delete related deliverables, tasks, sub-tasks, workspace records, files, reminders, and recommendations.\n\nThis action cannot be undone.",
+        );
+        if (ok) deleteMutation.mutate(item.id);
+      }}
+    />
+  );
+}
+
+function WorkstreamDetailPage({ id, setFormState }: { id: string; setFormState: (state: FormState | null) => void }) {
+  const queryClient = useQueryClient();
+  const query = useQuery({ queryKey: ["mvp18-workstream-workspace", id], queryFn: () => getWorkstreamWorkspace(id), retry: 1 });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteDeliverable,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mvp18-workstream-workspace", id] });
+      queryClient.invalidateQueries({ queryKey: ["mvp18-dashboard-status-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["mvp18-reminder-indicator"] });
+    },
+  });
+
+  if (query.isLoading) return <LoadingPanel label="Loading workstream workspace..." />;
+  if (query.isError) return <ErrorPanel error={query.error} />;
+
+  const workspace = query.data as WorkstreamWorkspace;
+
+  return (
+    <HierarchyChildrenPage
+      title={entityLabel(workspace.workstream)}
+      subtitle="Deliverables for this workstream."
+      childrenLabel="Deliverables"
+      items={workspace.deliverables}
+      emptyLabel="No deliverables yet."
+      addLabel="Add Deliverable"
+      viewLabel="View"
+      onAdd={() => setFormState({ mode: "create", entityKind: "deliverable", parentId: workspace.workstream.id })}
+      onView={(item) => navigateTo(`/deliverables/${item.id}`)}
+      onEdit={(item) => setFormState({ mode: "edit", entityKind: "deliverable", item })}
+      onDelete={(item) => {
+        const ok = window.confirm(
+          "Are you sure you want to delete this deliverable?\n\nThis will delete related tasks, sub-tasks, workspace records, files, reminders, and recommendations.\n\nThis action cannot be undone.",
+        );
+        if (ok) deleteMutation.mutate(item.id);
+      }}
+    />
+  );
+}
+
+function DeliverableDetailPage({ id, setFormState }: { id: string; setFormState: (state: FormState | null) => void }) {
+  const queryClient = useQueryClient();
+  const query = useQuery({ queryKey: ["mvp18-deliverable-workspace", id], queryFn: () => getDeliverableWorkspace(id), retry: 1 });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteTask,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mvp18-deliverable-workspace", id] });
+      queryClient.invalidateQueries({ queryKey: ["mvp18-dashboard-status-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["mvp18-reminder-indicator"] });
+    },
+  });
+
+  if (query.isLoading) return <LoadingPanel label="Loading deliverable workspace..." />;
+  if (query.isError) return <ErrorPanel error={query.error} />;
+
+  const workspace = query.data as DeliverableWorkspace;
+
+  return (
+    <HierarchyChildrenPage
+      title={entityLabel(workspace.deliverable)}
+      subtitle="Tasks for this deliverable."
+      childrenLabel="Tasks"
+      items={workspace.tasks}
+      emptyLabel="No tasks yet."
+      addLabel="Add Task"
+      viewLabel="Open Workspace"
+      onAdd={() => setFormState({ mode: "create", entityKind: "task", parentId: workspace.deliverable.id })}
+      onView={(item) => navigateTo(`/tasks/${item.id}`)}
+      onEdit={(item) => setFormState({ mode: "edit", entityKind: "task", item })}
+      onDelete={(item) => {
+        const ok = window.confirm(
+          "Are you sure you want to delete this task?\n\nThis will delete related sub-tasks, workspace records, files, reminders, and recommendations.\n\nThis action cannot be undone.",
+        );
+        if (ok) deleteMutation.mutate(item.id);
+      }}
+    />
+  );
+}
+
+function HierarchyChildrenPage({
+  title,
+  subtitle,
+  childrenLabel,
+  items,
+  emptyLabel,
+  addLabel,
+  viewLabel,
+  onAdd,
+  onView,
+  onEdit,
+  onDelete,
+}: {
+  title: string;
+  subtitle: string;
+  childrenLabel: string;
+  items: EntitySummary[];
+  emptyLabel: string;
+  addLabel: string;
+  viewLabel: string;
+  onAdd: () => void;
+  onView: (item: EntitySummary) => void;
+  onEdit: (item: EntitySummary) => void;
+  onDelete: (item: EntitySummary) => void;
+}) {
+  return (
+    <>
+      <div className="mvp18-page-header">
+        <div>
+          <h1>{title}</h1>
+          <p>{subtitle}</p>
+        </div>
+      </div>
+
+      <section className="mvp18-panel">
+        <h2>{childrenLabel}</h2>
+        <div className="mvp18-list">
+          {items.length === 0 ? <EmptyPanel label={emptyLabel} /> : null}
+          {items.map((item) => (
+            <EntityCard
+              key={item.id}
+              item={item}
+              viewLabel={viewLabel}
+              deleteLabel="Delete"
+              onView={() => onView(item)}
+              onEdit={() => onEdit(item)}
+              onDelete={() => onDelete(item)}
+            />
+          ))}
+        </div>
+      </section>
+
+      <div className="mvp18-panel">
+        <button className="mvp18-button-primary" onClick={onAdd}>{addLabel}</button>
+      </div>
+    </>
+  );
+}
+
+function WorkspaceRecordCards({ counts }: { counts: Record<string, number> }) {
+  const items = [
+    ["Data Collections", counts.data_collections],
+    ["Questions", counts.questions],
+    ["Findings", counts.findings],
+    ["Analysis", counts.analysis],
+    ["Evidence", counts.evidence],
+    ["Files", counts.files],
+    ["Recommendations", counts.recommendations],
+    ["Reminders", counts.reminders],
+  ];
+
+  return (
+    <div className="mvp18-card-grid">
+      {items.map(([label, value]) => (
+        <div className="mvp18-summary-card" key={label}>
+          <span>{label}</span>
+          <strong>{value}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TaskWorkspacePage({ id, setFormState }: { id: string; setFormState: (state: FormState | null) => void }) {
+  const queryClient = useQueryClient();
+  const query = useQuery({ queryKey: ["mvp18-task-workspace", id], queryFn: () => getTaskWorkspace(id), retry: 1 });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteSubtask,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mvp18-task-workspace", id] });
+      queryClient.invalidateQueries({ queryKey: ["mvp18-dashboard-status-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["mvp18-reminder-indicator"] });
+    },
+  });
+
+  if (query.isLoading) return <LoadingPanel label="Loading task workspace..." />;
+  if (query.isError) return <ErrorPanel error={query.error} />;
+
+  const workspace = query.data as TaskWorkspace;
+
+  return (
+    <>
+      <div className="mvp18-page-header">
+        <div>
+          <h1>{entityLabel(workspace.task)}</h1>
+          <p>{workspace.task.description || "Task workspace"}</p>
+          <div className="mvp18-entity-meta">
+            <StatusBadge status={workspace.task.status} />
+            <span>Owner: {workspace.task.owner_name || "-"}</span>
+            <span>Target: {formatDate(workspace.task.target_date)}</span>
+          </div>
+        </div>
+      </div>
+
+      <WorkspaceRecordCards counts={workspace.record_counts} />
+
+      <HierarchyChildrenPage
+        title="Sub-tasks"
+        subtitle="Sub-tasks for this task."
+        childrenLabel="Sub-tasks"
+        items={workspace.subtasks}
+        emptyLabel="No sub-tasks yet."
+        addLabel="Add Sub-task"
+        viewLabel="Open Workspace"
+        onAdd={() => setFormState({ mode: "create", entityKind: "subtask", parentId: workspace.task.id })}
+        onView={(item) => navigateTo(`/subtasks/${item.id}`)}
+        onEdit={(item) => setFormState({ mode: "edit", entityKind: "subtask", item })}
+        onDelete={(item) => {
+          const ok = window.confirm(
+            "Are you sure you want to delete this sub-task?\n\nThis will delete related workspace records, files, reminders, and recommendations.\n\nThis action cannot be undone.",
+          );
+          if (ok) deleteMutation.mutate(item.id);
+        }}
+      />
+
+      <Mvp18WorkspacePanel scopeType="task" scopeId={workspace.task.id} />
+    </>
+  );
+}
+
+function SubtaskWorkspacePage({ id }: { id: string }) {
+  const query = useQuery({ queryKey: ["mvp18-subtask-workspace", id], queryFn: () => getSubtaskWorkspace(id), retry: 1 });
+
+  if (query.isLoading) return <LoadingPanel label="Loading sub-task workspace..." />;
+  if (query.isError) return <ErrorPanel error={query.error} />;
+
+  const workspace = query.data as SubtaskWorkspace;
+
+  return (
+    <>
+      <div className="mvp18-page-header">
+        <div>
+          <h1>{entityLabel(workspace.subtask)}</h1>
+          <p>{workspace.subtask.description || "Sub-task workspace"}</p>
+          <div className="mvp18-entity-meta">
+            <StatusBadge status={workspace.subtask.status} />
+            <span>Owner: {workspace.subtask.owner_name || "-"}</span>
+            <span>Target: {formatDate(workspace.subtask.target_date)}</span>
+          </div>
+        </div>
+      </div>
+
+      <WorkspaceRecordCards counts={workspace.record_counts} />
+      <Mvp18WorkspacePanel scopeType="subtask" scopeId={workspace.subtask.id} />
+    </>
+  );
+}
+
+function PlaceholderPage({ title, message }: { title: string; message: string }) {
+  return (
+    <div className="mvp18-panel">
+      <h1>{title}</h1>
+      <p>{message}</p>
+    </div>
+  );
+}
+
+function usePageBreadcrumb(route: RouteState): BreadcrumbItem[] {
+  return useMemo(() => {
+    if (route.path === "/") return [];
+    return route.parts.map((part, index) => ({
+      entity_type: "route",
+      entity_id: `00000000-0000-0000-0000-${String(index).padStart(12, "0")}`,
+      label: part,
+    }));
+  }, [route.path, route.parts]);
+}
+
+function MainRouter({ setFormState }: { setFormState: (state: FormState | null) => void }) {
+  const [route, setRoute] = useState<RouteState>(() => normalizePath());
+
+  useEffect(() => {
+    const handler = () => setRoute(normalizePath());
+    window.addEventListener("hashchange", handler);
+    return () => window.removeEventListener("hashchange", handler);
+  }, []);
+
+  const parts = route.parts;
+
+  if (route.path === "/" || parts.length === 0) return <DashboardPage />;
+  if (parts[0] === "engagements" && parts.length === 1) return <EngagementsPage setFormState={setFormState} />;
+  if (parts[0] === "engagements" && parts[1]) return <EngagementDetailPage id={parts[1]} setFormState={setFormState} />;
+  if (parts[0] === "workstreams" && parts[1]) return <WorkstreamDetailPage id={parts[1]} setFormState={setFormState} />;
+  if (parts[0] === "deliverables" && parts[1]) return <DeliverableDetailPage id={parts[1]} setFormState={setFormState} />;
+  if (parts[0] === "tasks" && parts[1]) return <TaskWorkspacePage id={parts[1]} setFormState={setFormState} />;
+  if (parts[0] === "subtasks" && parts[1]) return <SubtaskWorkspacePage id={parts[1]} />;
+
+  if (parts[0] === "tasks") {
+    return <PlaceholderPage title="My Work" message="Select a task from a deliverable page. MVP 18C can add a dedicated My Work list." />;
+  }
+
+  if (parts[0] === "reminders") {
+    return <PlaceholderPage title="Reminders" message="Use the reminder icon in the top right. A full reminders screen can be added after the simplified workspace is complete." />;
+  }
+
+  if (parts[0] === "reports") {
+    return <PlaceholderPage title="Reports" message="Reports remain available in the previous MVP flow. MVP 18 focuses on simplifying the workspace flow first." />;
+  }
+
+  if (parts[0] === "operations") {
+    return <PlaceholderPage title="Operations" message="Operations dashboard remains available in the previous MVP flow. It can be moved into this simplified shell after MVP 18C." />;
+  }
+
+  if (parts[0] === "settings") {
+    return <PlaceholderPage title="Settings" message="Runtime configuration and diagnostics can be moved here after the hierarchy workspace is complete." />;
+  }
+
+  return <PlaceholderPage title="Page Not Found" message="The requested workspace route was not found." />;
 }
 
 function App() {
   const queryClient = useQueryClient();
   const [session, setSession] = useState<StoredSession | null>(() => getStoredSession());
+  const [formState, setFormState] = useState<FormState | null>(null);
+  const [route, setRoute] = useState<RouteState>(() => normalizePath());
+
+  useEffect(() => {
+    const handler = () => setRoute(normalizePath());
+    window.addEventListener("hashchange", handler);
+    return () => window.removeEventListener("hashchange", handler);
+  }, []);
 
   const loginRequired = isLoginRequired();
 
-  const summaryQuery = useQuery({
-    queryKey: ["dashboard-summary"],
-    queryFn: getDashboardSummary,
-    enabled: !loginRequired || Boolean(session),
-  });
-
-  const remindersQuery = useQuery({
-    queryKey: ["active-reminders"],
-    queryFn: getActiveReminders,
-    enabled: !loginRequired || Boolean(session),
-  });
-
-  const generateRemindersMutation = useMutation({
-    mutationFn: generateReminders,
+  const createMutation = useMutation({
+    mutationFn: async (stateAndPayload: { state: FormState; payload: HierarchyFormPayload }) => {
+      const { state, payload } = stateAndPayload;
+      if (state.entityKind === "engagement") return createEngagement(payload);
+      if (state.entityKind === "workstream" && state.parentId) return createWorkstream(state.parentId, payload);
+      if (state.entityKind === "deliverable" && state.parentId) return createDeliverable(state.parentId, payload);
+      if (state.entityKind === "task" && state.parentId) return createTask(state.parentId, payload);
+      if (state.entityKind === "subtask" && state.parentId) return createSubtask(state.parentId, payload);
+      throw new Error("Missing parent context for create action.");
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
-      queryClient.invalidateQueries({ queryKey: ["active-reminders"] });
+      setFormState(null);
+      queryClient.invalidateQueries();
     },
   });
 
-  const commonQueryEnabled = !loginRequired || Boolean(session);
-
-  const engagementsQuery = useQuery({ queryKey: ["engagements"], queryFn: getEngagements, enabled: commonQueryEnabled });
-  const workstreamsQuery = useQuery({ queryKey: ["workstreams"], queryFn: getWorkstreams, enabled: commonQueryEnabled });
-  const deliverablesQuery = useQuery({ queryKey: ["deliverables"], queryFn: getDeliverables, enabled: commonQueryEnabled });
-  const tasksQuery = useQuery({ queryKey: ["tasks"], queryFn: getTasks, enabled: commonQueryEnabled });
-  const subtasksQuery = useQuery({ queryKey: ["subtasks"], queryFn: getSubtasks, enabled: commonQueryEnabled });
-  const dataPointsQuery = useQuery({ queryKey: ["data-points"], queryFn: getDataPoints, enabled: commonQueryEnabled });
-  const stakeholderQuestionsQuery = useQuery({
-    queryKey: ["stakeholder-questions"],
-    queryFn: getStakeholderQuestions,
-    enabled: commonQueryEnabled,
-  });
-  const findingsQuery = useQuery({ queryKey: ["findings"], queryFn: getFindings, enabled: commonQueryEnabled });
-  const analysisOutputsQuery = useQuery({
-    queryKey: ["analysis-outputs"],
-    queryFn: getAnalysisOutputs,
-    enabled: commonQueryEnabled,
-  });
-  const evidenceItemsQuery = useQuery({ queryKey: ["evidence-items"], queryFn: getEvidenceItems, enabled: commonQueryEnabled });
-  const uploadedFilesQuery = useQuery({ queryKey: ["uploaded-files"], queryFn: getUploadedFiles, enabled: commonQueryEnabled });
-  const llmRecommendationsQuery = useQuery({
-    queryKey: ["llm-recommendations"],
-    queryFn: getLlmRecommendations,
-    enabled: commonQueryEnabled,
-  });
-  const llmRecommendationDecisionsQuery = useQuery({
-    queryKey: ["llm-recommendation-decisions"],
-    queryFn: getLlmRecommendationDecisions,
-    enabled: commonQueryEnabled,
-  });
-  const llmRecommendationRevisionsQuery = useQuery({
-    queryKey: ["llm-recommendation-revisions"],
-    queryFn: getLlmRecommendationRevisions,
-    enabled: commonQueryEnabled,
-  });
-  const llmRecommendationActionItemsQuery = useQuery({
-    queryKey: ["llm-recommendation-action-items"],
-    queryFn: getLlmRecommendationActionItems,
-    enabled: commonQueryEnabled,
-  });
-  const deliverableReviewsQuery = useQuery({
-    queryKey: ["deliverable-reviews"],
-    queryFn: getDeliverableReviews,
-    enabled: commonQueryEnabled,
-  });
-  const reviewWorkflowsQuery = useQuery({
-    queryKey: ["deliverable-review-workflows"],
-    queryFn: getDeliverableReviewWorkflows,
-    enabled: commonQueryEnabled,
-  });
-  const reviewActionItemsQuery = useQuery({
-    queryKey: ["deliverable-review-action-items"],
-    queryFn: getDeliverableReviewActionItems,
-    enabled: commonQueryEnabled,
-  });
-  const timesheetsQuery = useQuery({ queryKey: ["timesheets"], queryFn: getTimesheets, enabled: commonQueryEnabled });
-  const timesheetSummariesQuery = useQuery({
-    queryKey: ["timesheet-summaries"],
-    queryFn: getTimesheetSummaries,
-    enabled: commonQueryEnabled,
+  const updateMutation = useMutation({
+    mutationFn: async (stateAndPayload: { state: FormState; payload: HierarchyFormPayload }) => {
+      const { state, payload } = stateAndPayload;
+      if (!state.item) throw new Error("Missing item for update action.");
+      if (state.entityKind === "engagement") return updateEngagement(state.item.id, payload);
+      if (state.entityKind === "workstream") return updateWorkstream(state.item.id, payload);
+      if (state.entityKind === "deliverable") return updateDeliverable(state.item.id, payload);
+      if (state.entityKind === "task") return updateTask(state.item.id, payload);
+      if (state.entityKind === "subtask") return updateSubtask(state.item.id, payload);
+      throw new Error("Unsupported update action.");
+    },
+    onSuccess: () => {
+      setFormState(null);
+      queryClient.invalidateQueries();
+    },
   });
 
-  const summary = summaryQuery.data;
-  const reminders = remindersQuery.data ?? [];
-  const findings = findingsQuery.data ?? [];
-  const analysisOutputs = analysisOutputsQuery.data ?? [];
-  const evidenceItems = evidenceItemsQuery.data ?? [];
-  const subtasks = subtasksQuery.data ?? [];
-  const dataPoints = dataPointsQuery.data ?? [];
-  const stakeholderQuestions = stakeholderQuestionsQuery.data ?? [];
-  const uploadedFiles = uploadedFilesQuery.data ?? [];
-  const deliverables = deliverablesQuery.data ?? [];
-  const tasks = tasksQuery.data ?? [];
-  const engagements = engagementsQuery.data ?? [];
-  const workstreams = workstreamsQuery.data ?? [];
-  const llmRecommendations = llmRecommendationsQuery.data ?? [];
-  const llmRecommendationDecisions = llmRecommendationDecisionsQuery.data ?? [];
-  const llmRecommendationRevisions = llmRecommendationRevisionsQuery.data ?? [];
-  const llmRecommendationActionItems = llmRecommendationActionItemsQuery.data ?? [];
-  const deliverableReviews = deliverableReviewsQuery.data ?? [];
-  const reviewWorkflows = reviewWorkflowsQuery.data ?? [];
-  const reviewActionItems = reviewActionItemsQuery.data ?? [];
-  const timesheets = timesheetsQuery.data ?? [];
-  const timesheetSummaries = timesheetSummariesQuery.data ?? [];
-
-  const totalTimesheetHours = timesheets.reduce((sum, item) => sum + item.effort_hours, 0);
-  const openReviewActions = reviewActionItems.filter((item) => item.status.toLowerCase() !== "completed");
-  const openRecommendationActions = llmRecommendationActionItems.filter(
-    (item) => item.status.toLowerCase() !== "completed",
-  );
-
-  if (loginRequired && !session) {
-    return (
-      <div className="app-shell login-only-shell">
-        <main className="main login-only-main">
-          <section id="dashboard" className="hero-card">
-            <div>
-              <p className="eyebrow">MVP 15B Login Required</p>
-              <h2>Please login to access ASM Engagement Cockpit.</h2>
-              <p>
-                The frontend is configured with VITE_APP_LOGIN_REQUIRED=true, so the cockpit
-                will load after a valid backend session token is created.
-              </p>
-            </div>
-            <div className="health-panel">
-              <span>Session</span>
-              <strong>Required</strong>
-            </div>
-          </section>
-
-          <Mvp15AuthPanel onSessionChange={setSession} />
-        </main>
-      </div>
-    );
+  if ((loginRequired || route.path === "/login") && !session) {
+    return <LoginPage onLogin={setSession} />;
   }
 
+  const breadcrumb = usePageBreadcrumb(route);
+
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark">ASM</div>
-          <div>
-            <h1>ASM Engagement Cockpit</h1>
-            <p>Consulting execution tracker</p>
-          </div>
-        </div>
+    <AppShell session={session} setSession={setSession} breadcrumb={breadcrumb}>
+      <MainRouter setFormState={setFormState} />
 
-        <nav className="nav">
-          <a href="#dashboard">Dashboard</a>
-          <a href="#auth-session">Login / Session</a>
-          <a href="#runtime-config">Runtime Config</a>
-          <a href="#role-based-views">Role-Based Views</a>
-          <a href="#reminders">Reminders</a>
-          <a href="#engagements">Engagements</a>
-          <a href="#workstreams">Workstreams</a>
-          <a href="#deliverables">Deliverables</a>
-          <a href="#tasks">Tasks</a>
-          <a href="#subtasks">Sub-tasks</a>
-          <a href="#data-points">Data Points</a>
-          <a href="#stakeholder-questions">Stakeholder Questions</a>
-          <a href="#findings">Findings</a>
-          <a href="#analysis-outputs">Analysis Outputs</a>
-          <a href="#evidence-items">Evidence</a>
-          <a href="#dictation-refinement">Dictation & Refinement</a>
-          <a href="#file-upload">File Upload</a>
-          <a href="#llm-recommendations">LLM Recommendations</a>
-          <a href="#recommendation-management">Recommendation Management</a>
-          <a href="#reports-exports">Reports & Exports</a>
-          <a href="#timesheets">Timesheets</a>
-          <a href="#review-workflow">Review Workflow</a>
-          <a href="#future">Future MVPs</a>
-        </nav>
-      </aside>
-
-      <main className="main">
-        <section id="dashboard" className="hero-card">
-          <div>
-            <p className="eyebrow">MVP 15B Frontend Login and Session Handling</p>
-            <h2>Frontend login and session-token support are now available.</h2>
-            <p>
-              The cockpit can now create a local session token from backend login,
-              store it in browser storage, and send it automatically on protected API calls.
-            </p>
-          </div>
-          <div className="health-panel">
-            <span>Session</span>
-            <strong>{session ? "Available" : "Optional"}</strong>
-          </div>
-        </section>
-
-        <Mvp15AuthPanel onSessionChange={setSession} />
-
-        <section className="summary-grid">
-          <div className="summary-card"><span>Engagements</span><strong>{summary?.engagements ?? 0}</strong></div>
-          <div className="summary-card"><span>Workstreams</span><strong>{summary?.workstreams ?? 0}</strong></div>
-          <div className="summary-card"><span>Deliverables</span><strong>{summary?.deliverables ?? 0}</strong></div>
-          <div className="summary-card"><span>Tasks</span><strong>{summary?.tasks ?? 0}</strong></div>
-          <div className="summary-card"><span>Sub-tasks</span><strong>{summary?.subtasks ?? 0}</strong></div>
-        </section>
-
-        <section className="summary-grid data-summary-grid">
-          <div className="summary-card data-card"><span>Data Points</span><strong>{summary?.data_points ?? 0}</strong></div>
-          <div className="summary-card data-card"><span>Stakeholder Questions</span><strong>{summary?.stakeholder_questions ?? 0}</strong></div>
-          <div className="summary-card output-card"><span>Findings</span><strong>{findings.length}</strong></div>
-          <div className="summary-card output-card"><span>Analysis Outputs</span><strong>{analysisOutputs.length}</strong></div>
-          <div className="summary-card file-card"><span>Uploaded Files</span><strong>{uploadedFiles.length}</strong></div>
-          <div className="summary-card llm-card"><span>LLM Recommendations</span><strong>{llmRecommendations.length}</strong></div>
-          <div className="summary-card recommendation-summary-card"><span>Recommendation Actions</span><strong>{openRecommendationActions.length}</strong></div>
-          <div className="summary-card llm-card"><span>Deliverable Reviews</span><strong>{deliverableReviews.length}</strong></div>
-          <div className="summary-card timesheet-summary-card"><span>Timesheet Entries</span><strong>{timesheets.length}</strong></div>
-          <div className="summary-card timesheet-summary-card"><span>Timesheet Hours</span><strong>{totalTimesheetHours.toFixed(1)}</strong></div>
-          <div className="summary-card review-summary-card"><span>Review Workflows</span><strong>{reviewWorkflows.length}</strong></div>
-          <div className="summary-card review-summary-card"><span>Open Review Actions</span><strong>{openReviewActions.length}</strong></div>
-        </section>
-
-        <Mvp14RuntimeConfigPanel />
-
-        <Mvp13RoleBasedViewsPanel
-          workstreams={workstreams}
-          deliverables={deliverables}
-          tasks={tasks}
-          subtasks={subtasks}
-          dataPoints={dataPoints}
-          stakeholderQuestions={stakeholderQuestions}
-          findings={findings}
-          analysisOutputs={analysisOutputs}
-          llmRecommendations={llmRecommendations}
-          reviewWorkflows={reviewWorkflows}
-          reviewActionItems={reviewActionItems}
-          recommendationActionItems={llmRecommendationActionItems}
+      {formState ? (
+        <HierarchyFormModal
+          state={formState}
+          onClose={() => setFormState(null)}
+          onSubmit={(payload) => {
+            if (formState.mode === "create") {
+              createMutation.mutate({ state: formState, payload });
+            } else {
+              updateMutation.mutate({ state: formState, payload });
+            }
+          }}
         />
+      ) : null}
 
-        <section id="reminders" className="content-section">
-          <div className="section-header">
-            <div>
-              <h2>Active Reminders</h2>
-              <p>Reminders remain visible until completed, received, responded, revised, or snoozed.</p>
-            </div>
-            <button
-              className="primary-button"
-              onClick={() => generateRemindersMutation.mutate()}
-              disabled={generateRemindersMutation.isPending}
-            >
-              {generateRemindersMutation.isPending ? "Generating..." : "Refresh Reminders"}
-            </button>
-          </div>
-
-          <div className="reminder-list">
-            {reminders.length === 0 ? (
-              <div className="empty-reminders">No active reminders. Items may not have due dates within the reminder window.</div>
-            ) : (
-              reminders.map((reminder) => (
-                <article key={reminder.id} className={`reminder-card severity-${reminder.severity}`}>
-                  <div className="reminder-card-header">
-                    <ReminderBadge status={reminder.reminder_status} />
-                    <ParentTypeBadge parentType={reminder.parent_type} />
-                  </div>
-                  <h3>{reminder.title}</h3>
-                  <p>{reminder.message}</p>
-                  <div className="reminder-meta">
-                    <span>Due: {formatDate(reminder.effective_due_date)}</span>
-                    <span>Severity: {reminder.severity}</span>
-                    <span>Reminder Type: {reminder.reminder_type}</span>
-                  </div>
-                </article>
-              ))
-            )}
-          </div>
-        </section>
-
-        <section id="engagements" className="content-section">
-          <h2>Engagements</h2>
-          <div className="table-card">
-            {engagements.length === 0 ? (
-              <p className="empty-state">No engagements yet.</p>
-            ) : (
-              <table>
-                <thead><tr><th>Name</th><th>Client</th><th>Status</th><th>Progress</th></tr></thead>
-                <tbody>
-                  {engagements.map((item) => (
-                    <tr key={item.id}>
-                      <td>{item.name}</td>
-                      <td>{item.client_name ?? "-"}</td>
-                      <td><StatusBadge status={item.status} /></td>
-                      <td>{item.progress_percent}%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </section>
-
-        <section id="workstreams" className="content-section">
-          <h2>Workstreams</h2>
-          <div className="table-card">
-            {workstreams.length === 0 ? (
-              <p className="empty-state">No workstreams yet.</p>
-            ) : (
-              <table>
-                <thead><tr><th>External ID</th><th>Name</th><th>Status</th><th>Progress</th></tr></thead>
-                <tbody>
-                  {workstreams.map((item) => (
-                    <tr key={item.id}>
-                      <td>{item.external_id ?? "-"}</td>
-                      <td>{item.name}</td>
-                      <td><StatusBadge status={item.status} /></td>
-                      <td>{item.progress_percent}%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </section>
-
-        <section id="deliverables" className="content-section">
-          <h2>Deliverables</h2>
-          <div className="table-card">
-            {deliverables.length === 0 ? (
-              <p className="empty-state">No deliverables yet.</p>
-            ) : (
-              <table>
-                <thead><tr><th>External ID</th><th>Name</th><th>Status</th><th>Review Status</th><th>Target Date</th><th>Approval Date</th></tr></thead>
-                <tbody>
-                  {deliverables.map((item) => (
-                    <tr key={item.id}>
-                      <td>{item.external_id ?? "-"}</td>
-                      <td>{item.name}</td>
-                      <td><StatusBadge status={item.status} /></td>
-                      <td>{item.review_status ?? "-"}</td>
-                      <td>{formatDate(item.target_completion_date)}</td>
-                      <td>{formatDate(item.approval_date)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </section>
-
-        <section id="tasks" className="content-section">
-          <h2>Tasks</h2>
-          <div className="table-card">
-            {tasks.length === 0 ? (
-              <p className="empty-state">No tasks yet.</p>
-            ) : (
-              <table>
-                <thead><tr><th>External ID</th><th>Title</th><th>Status</th><th>Priority</th><th>Target Date</th><th>Revised Date</th></tr></thead>
-                <tbody>
-                  {tasks.map((item) => (
-                    <tr key={item.id}>
-                      <td>{item.external_id ?? "-"}</td>
-                      <td>{item.title}</td>
-                      <td><StatusBadge status={item.status} /></td>
-                      <td>{item.priority ?? "-"}</td>
-                      <td>{formatDate(item.target_completion_date)}</td>
-                      <td>{formatDate(item.revised_completion_date)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </section>
-
-        <section id="subtasks" className="content-section">
-          <h2>Sub-tasks</h2>
-          <div className="table-card">
-            {subtasks.length === 0 ? (
-              <p className="empty-state">No sub-tasks yet.</p>
-            ) : (
-              <table>
-                <thead><tr><th>External ID</th><th>Title</th><th>Status</th><th>Priority</th><th>Target Date</th><th>Revised Date</th></tr></thead>
-                <tbody>
-                  {subtasks.map((item) => (
-                    <tr key={item.id}>
-                      <td>{item.external_id ?? "-"}</td>
-                      <td>{item.title}</td>
-                      <td><StatusBadge status={item.status} /></td>
-                      <td>{item.priority ?? "-"}</td>
-                      <td>{formatDate(item.target_completion_date)}</td>
-                      <td>{formatDate(item.revised_completion_date)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </section>
-
-        <section id="data-points" className="content-section">
-          <h2>Data Points</h2>
-          <div className="table-card wide-table">
-            {dataPoints.length === 0 ? (
-              <p className="empty-state">No data points yet.</p>
-            ) : (
-              <table>
-                <thead><tr><th>Topic</th><th>Source</th><th>Status</th><th>Expected</th><th>Received</th><th>Quality</th></tr></thead>
-                <tbody>
-                  {dataPoints.map((item) => (
-                    <tr key={item.id}>
-                      <td><strong>{item.topic}</strong>{item.details ? <div className="small-note">{item.details}</div> : null}</td>
-                      <td>{item.source ?? "-"}</td>
-                      <td><StatusBadge status={item.status} /></td>
-                      <td>{formatDate(item.expected_received_date)}</td>
-                      <td>{formatDate(item.actual_received_date)}</td>
-                      <td>{item.data_quality ?? "-"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </section>
-
-        <section id="stakeholder-questions" className="content-section">
-          <h2>Stakeholder Questions</h2>
-          <div className="table-card wide-table">
-            {stakeholderQuestions.length === 0 ? (
-              <p className="empty-state">No stakeholder questions yet.</p>
-            ) : (
-              <table>
-                <thead><tr><th>Question</th><th>Category</th><th>Stakeholder</th><th>Status</th><th>Expected</th><th>Responded</th><th>Follow-up</th></tr></thead>
-                <tbody>
-                  {stakeholderQuestions.map((item) => (
-                    <tr key={item.id}>
-                      <td><strong>{item.question_text}</strong>{item.response_details ? <div className="small-note">Response: {item.response_details}</div> : null}</td>
-                      <td>{item.question_category ?? "-"}</td>
-                      <td>{item.stakeholder_name ?? "-"}{item.stakeholder_role ? <div className="small-note">{item.stakeholder_role}</div> : null}</td>
-                      <td><StatusBadge status={item.response_status} /></td>
-                      <td>{formatDate(item.expected_response_date)}</td>
-                      <td>{formatDate(item.actual_response_date)}</td>
-                      <td>{yesNo(item.follow_up_required)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </section>
-
-        <section id="findings" className="content-section">
-          <h2>Findings</h2>
-          <div className="table-card wide-table">
-            {findings.length === 0 ? (
-              <p className="empty-state">No findings yet.</p>
-            ) : (
-              <table>
-                <thead><tr><th>Finding</th><th>Type</th><th>Severity</th><th>Status</th><th>Confidence</th><th>Validated</th></tr></thead>
-                <tbody>
-                  {findings.map((item) => (
-                    <tr key={item.id}>
-                      <td>
-                        <strong>{item.title}</strong>
-                        <div className="small-note">{item.finding_text}</div>
-                        {item.business_impact ? <div className="small-note">Impact: {item.business_impact}</div> : null}
-                        {item.recommendation ? <div className="small-note">Recommendation: {item.recommendation}</div> : null}
-                      </td>
-                      <td>{item.finding_type ?? "-"}</td>
-                      <td>{item.severity ?? "-"}</td>
-                      <td><StatusBadge status={item.status} /></td>
-                      <td>{item.confidence_level ?? "-"}</td>
-                      <td>{yesNo(item.is_validated)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </section>
-
-        <section id="analysis-outputs" className="content-section">
-          <h2>Analysis Outputs</h2>
-          <div className="table-card wide-table">
-            {analysisOutputs.length === 0 ? (
-              <p className="empty-state">No analysis outputs yet.</p>
-            ) : (
-              <table>
-                <thead><tr><th>Analysis</th><th>Type</th><th>Status</th><th>Confidence</th><th>Reviewed By</th><th>Reviewed Date</th></tr></thead>
-                <tbody>
-                  {analysisOutputs.map((item) => (
-                    <tr key={item.id}>
-                      <td>
-                        <strong>{item.analysis_title}</strong>
-                        <div className="small-note">{item.analysis_text}</div>
-                        {item.methodology ? <div className="small-note">Methodology: {item.methodology}</div> : null}
-                        {item.limitations ? <div className="small-note">Limitations: {item.limitations}</div> : null}
-                      </td>
-                      <td>{item.analysis_type ?? "-"}</td>
-                      <td><StatusBadge status={item.status} /></td>
-                      <td>{item.confidence_level ?? "-"}</td>
-                      <td>{item.reviewed_by ?? "-"}</td>
-                      <td>{formatDate(item.reviewed_date)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </section>
-
-        <section id="evidence-items" className="content-section">
-          <h2>Evidence Items</h2>
-          <div className="table-card wide-table">
-            {evidenceItems.length === 0 ? (
-              <p className="empty-state">No evidence items yet.</p>
-            ) : (
-              <table>
-                <thead><tr><th>Evidence</th><th>Type</th><th>Source</th><th>Date</th><th>Confidence</th><th>Primary</th></tr></thead>
-                <tbody>
-                  {evidenceItems.map((item) => (
-                    <tr key={item.id}>
-                      <td><strong>{item.title}</strong>{item.description ? <div className="small-note">{item.description}</div> : null}{item.source_reference ? <div className="small-note">Reference: {item.source_reference}</div> : null}</td>
-                      <td>{item.evidence_type}</td>
-                      <td>{item.source_name ?? "-"}</td>
-                      <td>{formatDate(item.evidence_date)}</td>
-                      <td>{item.confidence_level ?? "-"}</td>
-                      <td>{yesNo(item.is_primary_evidence)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </section>
-
-        <Mvp6CaptureWorkspace subtasks={subtasks} />
-
-        <Mvp7FileUploadPanel
-          subtasks={subtasks}
-          dataPoints={dataPoints}
-          stakeholderQuestions={stakeholderQuestions}
-          findings={findings}
-          analysisOutputs={analysisOutputs}
-          evidenceItems={evidenceItems}
-          uploadedFiles={uploadedFiles}
-        />
-
-        <Mvp8LlmPanel
-          deliverables={deliverables}
-          tasks={tasks}
-          subtasks={subtasks}
-          findings={findings}
-          analysisOutputs={analysisOutputs}
-          recommendations={llmRecommendations}
-          deliverableReviews={deliverableReviews}
-        />
-
-        <Mvp12RecommendationManagementPanel
-          recommendations={llmRecommendations}
-          decisions={llmRecommendationDecisions}
-          revisions={llmRecommendationRevisions}
-          actionItems={llmRecommendationActionItems}
-        />
-
-        <Mvp9ReportsPanel
-          engagements={engagements}
-          workstreams={workstreams}
-          deliverables={deliverables}
-          tasks={tasks}
-          subtasks={subtasks}
-          dataPoints={dataPoints}
-          stakeholderQuestions={stakeholderQuestions}
-          findings={findings}
-          analysisOutputs={analysisOutputs}
-          evidenceItems={evidenceItems}
-          uploadedFiles={uploadedFiles}
-          llmRecommendations={llmRecommendations}
-          deliverableReviews={deliverableReviews}
-        />
-
-        <Mvp10TimesheetPanel
-          workstreams={workstreams}
-          deliverables={deliverables}
-          tasks={tasks}
-          subtasks={subtasks}
-          timesheets={timesheets}
-          timesheetSummaries={timesheetSummaries}
-        />
-
-        <Mvp11ReviewWorkflowPanel
-          deliverables={deliverables}
-          reviewWorkflows={reviewWorkflows}
-          reviewActionItems={reviewActionItems}
-        />
-
-        <section id="future" className="content-section">
-          <h2>Future MVPs</h2>
-          <div className="future-grid">
-            <div>User table and role-based backend permissions</div>
-            <div>Audit, notifications, and collaboration workflow</div>
-            <div>Deployment readiness and packaging</div>
-            <div>Advanced reporting and charts</div>
-          </div>
-        </section>
-      </main>
-    </div>
+      {createMutation.isError ? <ErrorPanel error={createMutation.error} /> : null}
+      {updateMutation.isError ? <ErrorPanel error={updateMutation.error} /> : null}
+    </AppShell>
   );
 }
 
