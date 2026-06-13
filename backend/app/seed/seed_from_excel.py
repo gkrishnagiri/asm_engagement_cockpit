@@ -6,16 +6,19 @@ from pathlib import Path
 from typing import Any
 
 from openpyxl import load_workbook
-from sqlalchemy import select
+from sqlalchemy import select, text
+from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, create_database_tables
 from app.models import Deliverable, Engagement, Task, Workstream
 
-PRIMARY_OWNER = "Giridhar Krishnagiri"
+DEFAULT_MY_WORK_OWNER = "Giridhar"
 DEFAULT_EXCEL_PATH = Path("/home/induser1/giri/AIProjects/asm_engagement_cockpit/data/initial_tracker.xlsx")
 
 ENGAGEMENT_NAME = "Mondelez AMS 2.0 Internal Delivery Tracker"
 CLIENT_NAME = "Mondelez"
+
+OWNERSHIP_TABLES = ("workstreams", "deliverables", "tasks", "subtasks")
 
 
 def normalize_text(value: Any) -> str:
@@ -24,12 +27,12 @@ def normalize_text(value: Any) -> str:
     return str(value).strip()
 
 
-def normalize_owner(value: Any) -> str:
-    return normalize_text(value).lower()
+def normalize_compact(value: Any) -> str:
+    return " ".join(normalize_text(value).lower().split())
 
 
-def is_primary_owner(value: Any) -> bool:
-    return normalize_owner(value) == PRIMARY_OWNER.lower()
+def contains_owner(value: Any, owner_name: str = DEFAULT_MY_WORK_OWNER) -> bool:
+    return normalize_compact(owner_name) in normalize_compact(value)
 
 
 def excel_serial_to_date(value: Any) -> date | None:
@@ -43,14 +46,13 @@ def excel_serial_to_date(value: Any) -> date | None:
         return value.date()
 
     if isinstance(value, (int, float)):
-        # Excel date serials use 1899-12-30 as the common conversion base.
         return (datetime(1899, 12, 30) + timedelta(days=int(value))).date()
 
-    text_value = str(value).strip()
+    text_value = normalize_text(value)
     if not text_value:
         return None
 
-    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%m/%d/%Y", "%d/%m/%Y"):
+    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%m/%d/%Y", "%d/%m/%Y", "%d-%b-%Y", "%d %b %Y"):
         try:
             return datetime.strptime(text_value, fmt).date()
         except ValueError:
@@ -65,54 +67,56 @@ def normalize_workstream_external_id(value: Any, workstream_name: str | None = N
     if raw_value == "-":
         return "WS8"
 
-    if raw_value.startswith("WS"):
-        return raw_value.split()[0].strip()
+    if raw_value.upper().startswith("WS"):
+        return raw_value.split()[0].strip().upper()
 
     normalized_name = normalize_text(workstream_name).lower()
 
     if "automation" in normalized_name and "roadmap" in normalized_name:
         return "WS8"
 
-    return raw_value
+    return raw_value.upper()
 
 
-def normalize_workstream_name_from_task(value: Any) -> tuple[str, str]:
-    raw_value = normalize_text(value)
-
-    if not raw_value:
-        return "", ""
-
-    parts = raw_value.split(" ", 1)
-
-    if len(parts) == 1:
-        external_id = normalize_workstream_external_id(parts[0], raw_value)
-        return external_id, raw_value
-
-    external_id = normalize_workstream_external_id(parts[0], raw_value)
-    name = parts[1].strip()
-
-    return external_id, name
+def normalize_deliverable_external_id(value: Any) -> str:
+    return normalize_text(value).upper()
 
 
-def get_or_create_engagement(session) -> Engagement:
-    existing = session.scalar(select(Engagement).where(Engagement.name == ENGAGEMENT_NAME))
-    if existing is not None:
-        return existing
+def get_model_columns(model: type[Any]) -> set[str]:
+    return {column.key for column in model.__table__.columns}
 
-    engagement = Engagement(
-        name=ENGAGEMENT_NAME,
-        client_name=CLIENT_NAME,
-        description=(
-            "Seeded from the Mondelez AMS 2.0 HCLTech Internal Delivery Tracker. "
-            "Initial data includes primary-owned workstreams, deliverables, and tasks."
+
+def set_if_column(item: Any, column_name: str, value: Any) -> None:
+    if column_name in get_model_columns(type(item)):
+        setattr(item, column_name, value)
+
+
+def update_owner_columns(session: Session, table_name: str, entity_id: Any, owner_name: str | None, secondary_owner_name: str | None) -> None:
+    if table_name not in OWNERSHIP_TABLES:
+        return
+
+    session.execute(
+        text(
+            f"""
+            UPDATE {table_name}
+            SET owner_name = :owner_name,
+                secondary_owner_name = :secondary_owner_name
+            WHERE id = :entity_id
+            """
         ),
-        status="In Progress",
+        {
+            "owner_name": owner_name,
+            "secondary_owner_name": secondary_owner_name,
+            "entity_id": str(entity_id),
+        },
     )
 
-    session.add(engagement)
-    session.flush()
 
-    return engagement
+def ensure_ownership_columns(session: Session) -> None:
+    for table_name in OWNERSHIP_TABLES:
+        session.execute(text(f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS owner_name VARCHAR(250)"))
+        session.execute(text(f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS secondary_owner_name VARCHAR(500)"))
+    session.commit()
 
 
 def read_sheet_rows(workbook, sheet_name: str, header_row_number: int) -> list[dict[str, Any]]:
@@ -134,19 +138,46 @@ def read_sheet_rows(workbook, sheet_name: str, header_row_number: int) -> list[d
     return rows
 
 
-def seed_workstreams(session, workbook, engagement: Engagement) -> dict[str, Workstream]:
+def get_or_create_engagement(session: Session) -> Engagement:
+    existing = session.scalar(select(Engagement).where(Engagement.name == ENGAGEMENT_NAME))
+    if existing is not None:
+        existing.client_name = CLIENT_NAME
+        existing.description = (
+            "Seeded from the Mondelez AMS 2.0 HCLTech Internal Delivery Tracker. "
+            "The seed now loads all valid tracker rows; My Work filtering is handled by the UI/API."
+        )
+        existing.status = existing.status or "In Progress"
+        return existing
+
+    engagement = Engagement(
+        name=ENGAGEMENT_NAME,
+        client_name=CLIENT_NAME,
+        description=(
+            "Seeded from the Mondelez AMS 2.0 HCLTech Internal Delivery Tracker. "
+            "The seed now loads all valid tracker rows; My Work filtering is handled by the UI/API."
+        ),
+        status="In Progress",
+    )
+
+    session.add(engagement)
+    session.flush()
+
+    return engagement
+
+
+def seed_workstreams(session: Session, workbook, engagement: Engagement) -> dict[str, Workstream]:
     rows = read_sheet_rows(workbook, "Workstream Ownership", 1)
     workstreams_by_external_id: dict[str, Workstream] = {}
 
     for row in rows:
-        if not is_primary_owner(row.get("Primary HCL Owner")):
-            continue
-
         external_id = normalize_workstream_external_id(row.get("WS"), row.get("Workstream"))
         name = normalize_text(row.get("Workstream"))
 
         if not external_id or not name:
             continue
+
+        primary_owner = normalize_text(row.get("Primary HCL Owner")) or None
+        support_owner = normalize_text(row.get("Supporting Team")) or None
 
         existing = session.scalar(
             select(Workstream).where(
@@ -165,6 +196,8 @@ def seed_workstreams(session, workbook, engagement: Engagement) -> dict[str, Wor
                 target_completion_date=excel_serial_to_date(row.get("Internal Due / Gate (TBC)")),
                 status="Not Started",
             )
+            set_if_column(item, "owner_name", primary_owner)
+            set_if_column(item, "secondary_owner_name", support_owner)
             session.add(item)
             session.flush()
             existing = item
@@ -172,56 +205,60 @@ def seed_workstreams(session, workbook, engagement: Engagement) -> dict[str, Wor
             existing.name = name
             existing.objective = normalize_text(row.get("Core Internal Responsibilities")) or existing.objective
             existing.scope = normalize_text(row.get("Committed Deliverables")) or existing.scope
-            existing.target_completion_date = (
-                excel_serial_to_date(row.get("Internal Due / Gate (TBC)"))
-                or existing.target_completion_date
-            )
+            existing.target_completion_date = excel_serial_to_date(row.get("Internal Due / Gate (TBC)")) or existing.target_completion_date
+            set_if_column(existing, "owner_name", primary_owner)
+            set_if_column(existing, "secondary_owner_name", support_owner)
 
+        update_owner_columns(session, "workstreams", existing.id, primary_owner, support_owner)
         workstreams_by_external_id[external_id] = existing
 
     return workstreams_by_external_id
 
 
-def seed_deliverables(
-    session,
-    workbook,
-    engagement: Engagement,
-    workstreams_by_external_id: dict[str, Workstream],
-) -> dict[str, Deliverable]:
+def get_or_create_placeholder_workstream(session: Session, engagement: Engagement, workstreams_by_external_id: dict[str, Workstream], external_id: str) -> Workstream:
+    existing = workstreams_by_external_id.get(external_id)
+    if existing is not None:
+        return existing
+
+    existing = session.scalar(
+        select(Workstream).where(
+            Workstream.engagement_id == engagement.id,
+            Workstream.external_id == external_id,
+        )
+    )
+    if existing is not None:
+        workstreams_by_external_id[external_id] = existing
+        return existing
+
+    item = Workstream(
+        engagement_id=engagement.id,
+        external_id=external_id,
+        name=f"{external_id} Workstream",
+        status="Not Started",
+    )
+    session.add(item)
+    session.flush()
+    update_owner_columns(session, "workstreams", item.id, None, None)
+    workstreams_by_external_id[external_id] = item
+    return item
+
+
+def seed_deliverables(session: Session, workbook, engagement: Engagement, workstreams_by_external_id: dict[str, Workstream]) -> dict[str, Deliverable]:
     rows = read_sheet_rows(workbook, "Deliverable Control", 4)
     deliverables_by_external_id: dict[str, Deliverable] = {}
 
     for row in rows:
-        if not is_primary_owner(row.get("Primary Owner")):
-            continue
-
-        deliverable_external_id = normalize_text(row.get("ID"))
+        deliverable_external_id = normalize_deliverable_external_id(row.get("ID") or row.get("ID2"))
         workstream_external_id = normalize_workstream_external_id(row.get("Workstream"), row.get("Workstream"))
         name = normalize_text(row.get("Deliverable"))
 
         if not deliverable_external_id or not workstream_external_id or not name:
             continue
 
-        workstream = workstreams_by_external_id.get(workstream_external_id)
+        primary_owner = normalize_text(row.get("Primary Owner")) or None
+        support_owner = normalize_text(row.get("Support")) or None
 
-        if workstream is None:
-            workstream = session.scalar(
-                select(Workstream).where(
-                    Workstream.engagement_id == engagement.id,
-                    Workstream.external_id == workstream_external_id,
-                )
-            )
-
-        if workstream is None:
-            workstream = Workstream(
-                engagement_id=engagement.id,
-                external_id=workstream_external_id,
-                name=f"{workstream_external_id} Workstream",
-                status="Not Started",
-            )
-            session.add(workstream)
-            session.flush()
-            workstreams_by_external_id[workstream_external_id] = workstream
+        workstream = get_or_create_placeholder_workstream(session, engagement, workstreams_by_external_id, workstream_external_id)
 
         existing = session.scalar(
             select(Deliverable).where(
@@ -242,6 +279,8 @@ def seed_deliverables(
                 status=normalize_text(row.get("Status")) or "Not Started",
                 review_status="Not Submitted",
             )
+            set_if_column(item, "owner_name", primary_owner)
+            set_if_column(item, "secondary_owner_name", support_owner)
             session.add(item)
             session.flush()
             existing = item
@@ -251,39 +290,95 @@ def seed_deliverables(
             existing.start_date = excel_serial_to_date(row.get("Draft Due (TBC)")) or existing.start_date
             existing.target_completion_date = excel_serial_to_date(row.get("Final Due (TBC)")) or existing.target_completion_date
             existing.status = normalize_text(row.get("Status")) or existing.status
+            set_if_column(existing, "owner_name", primary_owner)
+            set_if_column(existing, "secondary_owner_name", support_owner)
 
+        update_owner_columns(session, "deliverables", existing.id, primary_owner, support_owner)
         deliverables_by_external_id[deliverable_external_id] = existing
 
     return deliverables_by_external_id
 
 
-def find_best_deliverable_for_task(
-    task_row: dict[str, Any],
-    deliverables_by_external_id: dict[str, Deliverable],
+def find_deliverable_by_name_and_workstream(
+    session: Session,
+    deliverable_name: str,
+    workstream_external_id: str,
     workstreams_by_external_id: dict[str, Workstream],
 ) -> Deliverable | None:
-    workstream_external_id, _ = normalize_workstream_name_from_task(task_row.get("Workstream"))
-
-    candidate_deliverables = [
-        deliverable
-        for deliverable in deliverables_by_external_id.values()
-        if workstreams_by_external_id.get(workstream_external_id) is not None
-        and deliverable.workstream_id == workstreams_by_external_id[workstream_external_id].id
-    ]
-
-    if not candidate_deliverables:
+    if not deliverable_name or not workstream_external_id:
         return None
 
-    # MVP 2 seed rule:
-    # Tasks in the Excel tracker are workstream-level execution tasks.
-    # Until the UI supports explicit task-to-deliverable mapping, attach each task
-    # to the first primary-owned deliverable in the same workstream.
-    return sorted(candidate_deliverables, key=lambda item: item.external_id or "")[0]
+    workstream = workstreams_by_external_id.get(workstream_external_id)
+    if workstream is None:
+        return None
+
+    normalized_target = normalize_compact(deliverable_name)
+    candidates = list(session.scalars(select(Deliverable).where(Deliverable.workstream_id == workstream.id)).all())
+
+    for candidate in candidates:
+        if normalize_compact(candidate.name) == normalized_target:
+            return candidate
+
+    for candidate in candidates:
+        if normalized_target and normalized_target in normalize_compact(candidate.name):
+            return candidate
+
+    return None
+
+
+def get_or_create_deliverable_for_task(
+    session: Session,
+    row: dict[str, Any],
+    engagement: Engagement,
+    workstreams_by_external_id: dict[str, Workstream],
+    deliverables_by_external_id: dict[str, Deliverable],
+) -> Deliverable | None:
+    deliverable_external_id = normalize_deliverable_external_id(row.get("Deliverable ID"))
+    deliverable_name = normalize_text(row.get("Deliverable"))
+    workstream_external_id = normalize_workstream_external_id(row.get("Workstream2") or row.get("Workstream"), row.get("Workstream"))
+
+    if deliverable_external_id and deliverable_external_id in deliverables_by_external_id:
+        return deliverables_by_external_id[deliverable_external_id]
+
+    if deliverable_external_id:
+        existing = session.scalar(select(Deliverable).where(Deliverable.external_id == deliverable_external_id))
+        if existing is not None:
+            deliverables_by_external_id[deliverable_external_id] = existing
+            return existing
+
+    by_name = find_deliverable_by_name_and_workstream(session, deliverable_name, workstream_external_id, workstreams_by_external_id)
+    if by_name is not None:
+        if by_name.external_id:
+            deliverables_by_external_id[by_name.external_id] = by_name
+        return by_name
+
+    if not deliverable_external_id and not deliverable_name:
+        return None
+
+    workstream = get_or_create_placeholder_workstream(session, engagement, workstreams_by_external_id, workstream_external_id or "UNMAPPED")
+    placeholder_id = deliverable_external_id or f"UNMAPPED-{normalize_text(row.get('Task ID')) or 'TASK'}"
+    placeholder_name = deliverable_name or f"Unmapped Deliverable for {placeholder_id}"
+
+    item = Deliverable(
+        workstream_id=workstream.id,
+        external_id=placeholder_id,
+        name=placeholder_name,
+        description="Placeholder deliverable created by seed loader because the task referenced a deliverable not found in Deliverable Control.",
+        deliverable_type="Consulting Deliverable",
+        status="Not Started",
+        review_status="Not Submitted",
+    )
+    session.add(item)
+    session.flush()
+    update_owner_columns(session, "deliverables", item.id, None, None)
+    deliverables_by_external_id[placeholder_id] = item
+    return item
 
 
 def seed_tasks(
-    session,
+    session: Session,
     workbook,
+    engagement: Engagement,
     deliverables_by_external_id: dict[str, Deliverable],
     workstreams_by_external_id: dict[str, Workstream],
 ) -> dict[str, Task]:
@@ -291,23 +386,25 @@ def seed_tasks(
     tasks_by_external_id: dict[str, Task] = {}
 
     for row in rows:
-        if not is_primary_owner(row.get("Primary Owner")):
-            continue
-
-        task_external_id = normalize_text(row.get("Task ID"))
+        task_external_id = normalize_text(row.get("Task ID")).upper()
         title = normalize_text(row.get("Activity / Task"))
 
         if not task_external_id or not title:
             continue
 
-        deliverable = find_best_deliverable_for_task(
+        deliverable = get_or_create_deliverable_for_task(
+            session,
             row,
-            deliverables_by_external_id,
+            engagement,
             workstreams_by_external_id,
+            deliverables_by_external_id,
         )
 
         if deliverable is None:
             continue
+
+        primary_owner = normalize_text(row.get("Primary Owner")) or None
+        support_owner = normalize_text(row.get("Support")) or None
 
         existing = session.scalar(
             select(Task).where(
@@ -317,12 +414,17 @@ def seed_tasks(
         )
 
         description_parts = [
+            f"Workstream: {normalize_text(row.get('Workstream'))}",
+            f"Workstream ID: {normalize_text(row.get('Workstream2'))}",
+            f"Deliverable: {normalize_text(row.get('Deliverable'))}",
+            f"Deliverable ID: {normalize_text(row.get('Deliverable ID'))}",
             f"Phase: {normalize_text(row.get('Phase'))}",
             f"Internal checkpoint: {normalize_text(row.get('Internal Checkpoint'))}",
+            f"RAG: {normalize_text(row.get('RAG'))}",
             f"Dependency/Input Needed: {normalize_text(row.get('Dependency / Input Needed'))}",
             f"Next Action: {normalize_text(row.get('Next Action'))}",
             f"Due Health: {normalize_text(row.get('Due Health'))}",
-            f"Support: {normalize_text(row.get('Support'))}",
+            f"Support: {support_owner or ''}",
         ]
         description = "\n".join(part for part in description_parts if not part.endswith(": "))
 
@@ -337,6 +439,8 @@ def seed_tasks(
                 target_completion_date=excel_serial_to_date(row.get("Due Date")),
                 status=normalize_text(row.get("Status")) or "Not Started",
             )
+            set_if_column(item, "owner_name", primary_owner)
+            set_if_column(item, "secondary_owner_name", support_owner)
             session.add(item)
             session.flush()
             existing = item
@@ -347,10 +451,29 @@ def seed_tasks(
             existing.start_date = excel_serial_to_date(row.get("Start Date")) or existing.start_date
             existing.target_completion_date = excel_serial_to_date(row.get("Due Date")) or existing.target_completion_date
             existing.status = normalize_text(row.get("Status")) or existing.status
+            set_if_column(existing, "owner_name", primary_owner)
+            set_if_column(existing, "secondary_owner_name", support_owner)
 
+        update_owner_columns(session, "tasks", existing.id, primary_owner, support_owner)
         tasks_by_external_id[task_external_id] = existing
 
     return tasks_by_external_id
+
+
+def count_owned(session: Session, table_name: str, owner_column: str, owner_name: str = DEFAULT_MY_WORK_OWNER) -> int:
+    return int(
+        session.execute(
+            text(
+                f"""
+                SELECT COUNT(*)
+                FROM {table_name}
+                WHERE lower(coalesce({owner_column}, '')) LIKE :owner_pattern
+                """
+            ),
+            {"owner_pattern": f"%{owner_name.lower()}%"},
+        ).scalar()
+        or 0
+    )
 
 
 def run_seed(excel_path: Path) -> None:
@@ -365,6 +488,8 @@ def run_seed(excel_path: Path) -> None:
     workbook = load_workbook(excel_path, data_only=True)
 
     with SessionLocal() as session:
+        ensure_ownership_columns(session)
+
         engagement = get_or_create_engagement(session)
 
         workstreams_by_external_id = seed_workstreams(session, workbook, engagement)
@@ -377,6 +502,7 @@ def run_seed(excel_path: Path) -> None:
         tasks_by_external_id = seed_tasks(
             session,
             workbook,
+            engagement,
             deliverables_by_external_id,
             workstreams_by_external_id,
         )
@@ -390,10 +516,21 @@ def run_seed(excel_path: Path) -> None:
         print(f"Deliverables: {len(deliverables_by_external_id)}")
         print(f"Tasks:        {len(tasks_by_external_id)}")
         print("")
+        print("My Work Summary for Giridhar:")
+        print(f"Primary workstreams:    {count_owned(session, 'workstreams', 'owner_name')}")
+        print(f"Secondary workstreams:  {count_owned(session, 'workstreams', 'secondary_owner_name')}")
+        print(f"Primary deliverables:   {count_owned(session, 'deliverables', 'owner_name')}")
+        print(f"Secondary deliverables: {count_owned(session, 'deliverables', 'secondary_owner_name')}")
+        print(f"Primary tasks:          {count_owned(session, 'tasks', 'owner_name')}")
+        print(f"Secondary tasks:        {count_owned(session, 'tasks', 'secondary_owner_name')}")
+        print("")
         print("Seed rule:")
-        print("- Only rows where Giridhar Krishnagiri is the primary owner were loaded.")
-        print("- Workstream '-' for AI and Automation Roadmap Advisory was normalized to WS8.")
-        print("- Tasks were attached to the first primary-owned deliverable in the matching workstream.")
+        print("- All valid tracker rows were loaded; owner filtering is not applied during seed.")
+        print("- Workstream ownership uses Primary HCL Owner and Supporting Team.")
+        print("- Deliverable ownership uses Primary Owner and Support.")
+        print("- Task ownership uses Primary Owner and Support.")
+        print("- Tasks are mapped to deliverables using Deliverable ID from the Detailed Task Tracker.")
+        print("- Workstream '-' for AI and Automation Roadmap Advisory is normalized to WS8.")
 
 
 def parse_args() -> argparse.Namespace:

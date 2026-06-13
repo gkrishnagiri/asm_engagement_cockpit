@@ -58,6 +58,8 @@ export type EntitySummary = {
   priority: string | null;
   progress_percent: string | number | null;
   owner_name: string | null;
+  secondary_owner_name?: string | null;
+  ownership_rank?: number | null;
   start_date: string | null;
   target_date: string | null;
   revised_date: string | null;
@@ -65,6 +67,49 @@ export type EntitySummary = {
   created_at: string | null;
   updated_at: string | null;
 };
+
+
+export type RawHierarchyRecord = Record<string, string | number | null | undefined>;
+
+function normalizeHierarchyRecord(row: RawHierarchyRecord): EntitySummary {
+  return {
+    id: String(row.id || ""),
+    external_id: row.external_id == null ? null : String(row.external_id),
+    name: row.name == null ? null : String(row.name),
+    title: row.title == null ? null : String(row.title),
+    description: row.description == null ? null : String(row.description),
+    status: row.status == null ? null : String(row.status),
+    priority: row.priority == null ? null : String(row.priority),
+    progress_percent: row.progress_percent == null ? null : row.progress_percent,
+    owner_name: row.owner_name == null ? null : String(row.owner_name),
+    secondary_owner_name: row.secondary_owner_name == null ? null : String(row.secondary_owner_name),
+    ownership_rank: row.ownership_rank == null ? null : Number(row.ownership_rank),
+    start_date: row.start_date == null ? null : String(row.start_date),
+    target_date: row.target_date == null
+      ? row.target_completion_date == null
+        ? row.target_end_date == null
+          ? null
+          : String(row.target_end_date)
+        : String(row.target_completion_date)
+      : String(row.target_date),
+    revised_date: row.revised_date == null
+      ? row.revised_completion_date == null
+        ? row.revised_end_date == null
+          ? null
+          : String(row.revised_end_date)
+        : String(row.revised_completion_date)
+      : String(row.revised_date),
+    actual_date: row.actual_date == null
+      ? row.actual_completion_date == null
+        ? row.actual_end_date == null
+          ? null
+          : String(row.actual_end_date)
+        : String(row.actual_completion_date)
+      : String(row.actual_date),
+    created_at: row.created_at == null ? null : String(row.created_at),
+    updated_at: row.updated_at == null ? null : String(row.updated_at),
+  };
+}
 
 export type BreadcrumbItem = {
   entity_type: string;
@@ -139,6 +184,25 @@ export type HierarchyFormPayload = {
   revised_completion_date?: string | null;
   actual_end_date?: string | null;
   actual_completion_date?: string | null;
+};
+
+
+export type MyWorkResponse = {
+  owner_name: string;
+  primary_workstreams: EntitySummary[];
+  secondary_workstreams: EntitySummary[];
+  primary_deliverables: EntitySummary[];
+  secondary_deliverables: EntitySummary[];
+  primary_tasks: EntitySummary[];
+  secondary_tasks: EntitySummary[];
+  counts: {
+    primary_workstreams: number;
+    secondary_workstreams: number;
+    primary_deliverables: number;
+    secondary_deliverables: number;
+    primary_tasks: number;
+    secondary_tasks: number;
+  };
 };
 
 export type DeleteResponse = {
@@ -261,6 +325,26 @@ export function getReminderIndicator(): Promise<ReminderIndicator> {
   return getJson<ReminderIndicator>("/ui/reminder-indicator");
 }
 
+export function getMyWork(ownerName = "Giridhar"): Promise<MyWorkResponse> {
+  return getJson<MyWorkResponse>(`/ui/my-work?owner_name=${encodeURIComponent(ownerName)}`);
+}
+
+export function getMyWorkWorkstreamWorkspace(id: string, ownerName = "Giridhar"): Promise<WorkstreamWorkspace> {
+  return getJson<WorkstreamWorkspace>(`/ui/my-work/workstreams/${id}/workspace?owner_name=${encodeURIComponent(ownerName)}`);
+}
+
+export function getMyWorkDeliverableWorkspace(id: string, ownerName = "Giridhar"): Promise<DeliverableWorkspace> {
+  return getJson<DeliverableWorkspace>(`/ui/my-work/deliverables/${id}/workspace?owner_name=${encodeURIComponent(ownerName)}`);
+}
+
+export function getMyWorkTaskWorkspace(id: string, ownerName = "Giridhar"): Promise<TaskWorkspace> {
+  return getJson<TaskWorkspace>(`/ui/my-work/tasks/${id}/workspace?owner_name=${encodeURIComponent(ownerName)}`);
+}
+
+export function getMyWorkSubtaskWorkspace(id: string, ownerName = "Giridhar"): Promise<SubtaskWorkspace> {
+  return getJson<SubtaskWorkspace>(`/ui/my-work/subtasks/${id}/workspace?owner_name=${encodeURIComponent(ownerName)}`);
+}
+
 export function getEngagements(): Promise<EntitySummary[]> {
   return getJson<EntitySummary[]>("/ui/engagements");
 }
@@ -343,4 +427,25 @@ export function deleteSubtask(id: string): Promise<DeleteResponse> {
 
 export function getSubtaskWorkspace(id: string): Promise<SubtaskWorkspace> {
   return getJson<SubtaskWorkspace>(`/ui/subtasks/${id}/workspace`);
+}
+
+
+export async function getAllWorkstreams(): Promise<EntitySummary[]> {
+  const rows = await getJson<RawHierarchyRecord[]>("/workstreams");
+  return rows.map(normalizeHierarchyRecord);
+}
+
+export async function getAllDeliverables(): Promise<EntitySummary[]> {
+  const rows = await getJson<RawHierarchyRecord[]>("/deliverables");
+  return rows.map(normalizeHierarchyRecord);
+}
+
+export async function getAllTasks(): Promise<EntitySummary[]> {
+  const rows = await getJson<RawHierarchyRecord[]>("/tasks");
+  return rows.map(normalizeHierarchyRecord);
+}
+
+export async function getAllSubtasks(): Promise<EntitySummary[]> {
+  const rows = await getJson<RawHierarchyRecord[]>("/subtasks");
+  return rows.map(normalizeHierarchyRecord);
 }

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Annotated, Any, Type
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -82,6 +82,103 @@ from app.security import require_authenticated_request
 router = APIRouter(prefix="/api/ui", tags=["MVP 18 Simplified Workspace UI"])
 
 UPLOAD_ROOT = Path("data/uploads/mvp18_workspace")
+
+DEFAULT_MY_WORK_OWNER = "Giridhar"
+OWNED_TABLES = {"workstreams", "deliverables", "tasks", "subtasks"}
+
+
+def _contains_owner(value: Any, owner_name: str = DEFAULT_MY_WORK_OWNER) -> bool:
+    return owner_name.strip().lower() in str(value or "").strip().lower()
+
+
+def _safe_owner_row(db: Session, table_name: str, entity_id: uuid.UUID) -> dict[str, str | None]:
+    if table_name not in OWNED_TABLES:
+        return {"owner_name": None, "secondary_owner_name": None}
+
+    try:
+        row = db.execute(
+            text(
+                f"""
+                SELECT owner_name, secondary_owner_name
+                FROM {table_name}
+                WHERE id = :entity_id
+                """
+            ),
+            {"entity_id": str(entity_id)},
+        ).mappings().first()
+    except Exception:
+        return {"owner_name": None, "secondary_owner_name": None}
+
+    if row is None:
+        return {"owner_name": None, "secondary_owner_name": None}
+
+    return {
+        "owner_name": row.get("owner_name"),
+        "secondary_owner_name": row.get("secondary_owner_name"),
+    }
+
+
+def _ownership_rank(db: Session, table_name: str, item: Any, owner_name: str = DEFAULT_MY_WORK_OWNER) -> int:
+    owner_row = _safe_owner_row(db, table_name, item.id)
+
+    if _contains_owner(owner_row.get("owner_name"), owner_name):
+        return 0
+
+    if _contains_owner(owner_row.get("secondary_owner_name"), owner_name):
+        return 1
+
+    return 2
+
+
+def _sort_for_my_work_priority(db: Session, table_name: str, items: list[Any], owner_name: str = DEFAULT_MY_WORK_OWNER) -> list[Any]:
+    return sorted(
+        items,
+        key=lambda item: (
+            _ownership_rank(db, table_name, item, owner_name),
+            str(getattr(item, "external_id", "") or ""),
+            str(getattr(item, "name", None) or getattr(item, "title", None) or ""),
+        ),
+    )
+
+
+def _entity_summary_with_ownership(db: Session, table_name: str, item: Any) -> dict[str, Any]:
+    summary = _entity_summary(item).model_dump(mode="json")
+    owner_row = _safe_owner_row(db, table_name, item.id)
+    summary["owner_name"] = owner_row.get("owner_name") or summary.get("owner_name")
+    summary["secondary_owner_name"] = owner_row.get("secondary_owner_name")
+    summary["ownership_rank"] = _ownership_rank(db, table_name, item)
+    return summary
+
+
+def _owned_items(db: Session, model: Type[Any], table_name: str, owner_column: str, owner_name: str) -> list[Any]:
+    if table_name not in OWNED_TABLES or owner_column not in {"owner_name", "secondary_owner_name"}:
+        return []
+
+    try:
+        rows = db.execute(
+            text(
+                f"""
+                SELECT id
+                FROM {table_name}
+                WHERE lower(coalesce({owner_column}, '')) LIKE :owner_pattern
+                ORDER BY external_id NULLS LAST
+                """
+            ),
+            {"owner_pattern": f"%{owner_name.strip().lower()}%"},
+        ).mappings().all()
+    except Exception:
+        return []
+
+    items: list[Any] = []
+    for row in rows:
+        try:
+            item = db.get(model, uuid.UUID(str(row["id"])))
+        except Exception:
+            item = None
+        if item is not None:
+            items.append(item)
+
+    return _sort_for_my_work_priority(db, table_name, items, owner_name)
 
 
 def _now() -> datetime:
@@ -616,6 +713,178 @@ def get_reminder_indicator(
     )
 
 
+
+
+@router.get("/my-work")
+def get_my_work(
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[dict[str, Any], Depends(require_authenticated_request)],
+    owner_name: str = Query(default=DEFAULT_MY_WORK_OWNER),
+) -> dict[str, Any]:
+    primary_workstreams = _owned_items(db, Workstream, "workstreams", "owner_name", owner_name)
+    secondary_workstreams = [
+        item
+        for item in _owned_items(db, Workstream, "workstreams", "secondary_owner_name", owner_name)
+        if item.id not in {primary_item.id for primary_item in primary_workstreams}
+    ]
+
+    primary_deliverables = _owned_items(db, Deliverable, "deliverables", "owner_name", owner_name)
+    secondary_deliverables = [
+        item
+        for item in _owned_items(db, Deliverable, "deliverables", "secondary_owner_name", owner_name)
+        if item.id not in {primary_item.id for primary_item in primary_deliverables}
+    ]
+
+    primary_tasks = _owned_items(db, Task, "tasks", "owner_name", owner_name)
+    secondary_tasks = [
+        item
+        for item in _owned_items(db, Task, "tasks", "secondary_owner_name", owner_name)
+        if item.id not in {primary_item.id for primary_item in primary_tasks}
+    ]
+
+    return {
+        "owner_name": owner_name,
+        "primary_workstreams": [_entity_summary_with_ownership(db, "workstreams", item) for item in primary_workstreams],
+        "secondary_workstreams": [_entity_summary_with_ownership(db, "workstreams", item) for item in secondary_workstreams],
+        "primary_deliverables": [_entity_summary_with_ownership(db, "deliverables", item) for item in primary_deliverables],
+        "secondary_deliverables": [_entity_summary_with_ownership(db, "deliverables", item) for item in secondary_deliverables],
+        "primary_tasks": [_entity_summary_with_ownership(db, "tasks", item) for item in primary_tasks],
+        "secondary_tasks": [_entity_summary_with_ownership(db, "tasks", item) for item in secondary_tasks],
+        "counts": {
+            "primary_workstreams": len(primary_workstreams),
+            "secondary_workstreams": len(secondary_workstreams),
+            "primary_deliverables": len(primary_deliverables),
+            "secondary_deliverables": len(secondary_deliverables),
+            "primary_tasks": len(primary_tasks),
+            "secondary_tasks": len(secondary_tasks),
+        },
+    }
+
+
+
+def _my_work_filtered_items(db: Session, table_name: str, items: list[Any], owner_name: str = DEFAULT_MY_WORK_OWNER) -> list[Any]:
+    filtered = [item for item in items if _ownership_rank(db, table_name, item, owner_name) in {0, 1}]
+    return _sort_for_my_work_priority(db, table_name, filtered, owner_name)
+
+
+@router.get("/my-work/workstreams/{workstream_id}/workspace")
+def get_my_work_workstream_workspace(
+    workstream_id: uuid.UUID,
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[dict[str, Any], Depends(require_authenticated_request)],
+    owner_name: str = Query(default=DEFAULT_MY_WORK_OWNER),
+) -> dict[str, Any]:
+    workstream = _get_or_404(db, Workstream, workstream_id, "Workstream")
+    engagement = _get_or_404(db, Engagement, workstream.engagement_id, "Engagement")
+    deliverables = _my_work_filtered_items(
+        db,
+        "deliverables",
+        list(db.scalars(select(Deliverable).where(Deliverable.workstream_id == workstream.id)).all()),
+        owner_name,
+    )
+
+    return {
+        "owner_name": owner_name,
+        "engagement": _entity_summary_with_ownership(db, "engagements", engagement),
+        "workstream": _entity_summary_with_ownership(db, "workstreams", workstream),
+        "deliverables": [_entity_summary_with_ownership(db, "deliverables", item) for item in deliverables],
+        "breadcrumb": [
+            {"entity_type": "my_work", "entity_id": str(workstream.id), "label": "My Work"},
+            {"entity_type": "workstream", "entity_id": str(workstream.id), "label": _entity_label(workstream)},
+        ],
+    }
+
+
+@router.get("/my-work/deliverables/{deliverable_id}/workspace")
+def get_my_work_deliverable_workspace(
+    deliverable_id: uuid.UUID,
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[dict[str, Any], Depends(require_authenticated_request)],
+    owner_name: str = Query(default=DEFAULT_MY_WORK_OWNER),
+) -> dict[str, Any]:
+    deliverable = _get_or_404(db, Deliverable, deliverable_id, "Deliverable")
+    workstream = _get_or_404(db, Workstream, deliverable.workstream_id, "Workstream")
+    engagement = _get_or_404(db, Engagement, workstream.engagement_id, "Engagement")
+    tasks = _my_work_filtered_items(
+        db,
+        "tasks",
+        list(db.scalars(select(Task).where(Task.deliverable_id == deliverable.id)).all()),
+        owner_name,
+    )
+
+    return {
+        "owner_name": owner_name,
+        "engagement": _entity_summary_with_ownership(db, "engagements", engagement),
+        "workstream": _entity_summary_with_ownership(db, "workstreams", workstream),
+        "deliverable": _entity_summary_with_ownership(db, "deliverables", deliverable),
+        "tasks": [_entity_summary_with_ownership(db, "tasks", item) for item in tasks],
+        "breadcrumb": [
+            {"entity_type": "my_work", "entity_id": str(workstream.id), "label": "My Work"},
+            {"entity_type": "workstream", "entity_id": str(workstream.id), "label": _entity_label(workstream)},
+            {"entity_type": "deliverable", "entity_id": str(deliverable.id), "label": _entity_label(deliverable)},
+        ],
+    }
+
+
+@router.get("/my-work/tasks/{task_id}/workspace")
+def get_my_work_task_workspace(
+    task_id: uuid.UUID,
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[dict[str, Any], Depends(require_authenticated_request)],
+    owner_name: str = Query(default=DEFAULT_MY_WORK_OWNER),
+) -> dict[str, Any]:
+    engagement, workstream, deliverable, task = _get_hierarchy_for_task(db, task_id)
+    subtasks = _sort_for_my_work_priority(
+        db,
+        "subtasks",
+        list(db.scalars(select(Subtask).where(Subtask.task_id == task.id)).all()),
+        owner_name,
+    )
+
+    return {
+        "owner_name": owner_name,
+        "engagement": _entity_summary_with_ownership(db, "engagements", engagement),
+        "workstream": _entity_summary_with_ownership(db, "workstreams", workstream),
+        "deliverable": _entity_summary_with_ownership(db, "deliverables", deliverable),
+        "task": _entity_summary_with_ownership(db, "tasks", task),
+        "subtasks": [_entity_summary_with_ownership(db, "subtasks", item) for item in subtasks],
+        "breadcrumb": [
+            {"entity_type": "my_work", "entity_id": str(workstream.id), "label": "My Work"},
+            {"entity_type": "workstream", "entity_id": str(workstream.id), "label": _entity_label(workstream)},
+            {"entity_type": "deliverable", "entity_id": str(deliverable.id), "label": _entity_label(deliverable)},
+            {"entity_type": "task", "entity_id": str(task.id), "label": _entity_label(task)},
+        ],
+        "record_counts": _record_counts(db, "task", task.id).model_dump(),
+    }
+
+
+@router.get("/my-work/subtasks/{subtask_id}/workspace")
+def get_my_work_subtask_workspace(
+    subtask_id: uuid.UUID,
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[dict[str, Any], Depends(require_authenticated_request)],
+    owner_name: str = Query(default=DEFAULT_MY_WORK_OWNER),
+) -> dict[str, Any]:
+    engagement, workstream, deliverable, task, subtask = _get_hierarchy_for_subtask(db, subtask_id)
+
+    return {
+        "owner_name": owner_name,
+        "engagement": _entity_summary_with_ownership(db, "engagements", engagement),
+        "workstream": _entity_summary_with_ownership(db, "workstreams", workstream),
+        "deliverable": _entity_summary_with_ownership(db, "deliverables", deliverable),
+        "task": _entity_summary_with_ownership(db, "tasks", task),
+        "subtask": _entity_summary_with_ownership(db, "subtasks", subtask),
+        "breadcrumb": [
+            {"entity_type": "my_work", "entity_id": str(workstream.id), "label": "My Work"},
+            {"entity_type": "workstream", "entity_id": str(workstream.id), "label": _entity_label(workstream)},
+            {"entity_type": "deliverable", "entity_id": str(deliverable.id), "label": _entity_label(deliverable)},
+            {"entity_type": "task", "entity_id": str(task.id), "label": _entity_label(task)},
+            {"entity_type": "subtask", "entity_id": str(subtask.id), "label": _entity_label(subtask)},
+        ],
+        "record_counts": _record_counts(db, "subtask", subtask.id).model_dump(),
+    }
+
+
 @router.get("/engagements", response_model=list[EntitySummary])
 def list_ui_engagements(
     db: Annotated[Session, Depends(get_db)],
@@ -670,8 +939,10 @@ def get_engagement_workspace(
     _: Annotated[dict[str, Any], Depends(require_authenticated_request)],
 ) -> EngagementWorkspace:
     engagement = _get_or_404(db, Engagement, engagement_id, "Engagement")
-    workstreams = list(
-        db.scalars(select(Workstream).where(Workstream.engagement_id == engagement.id).order_by(Workstream.created_at.desc())).all()
+    workstreams = _sort_for_my_work_priority(
+        db,
+        "workstreams",
+        list(db.scalars(select(Workstream).where(Workstream.engagement_id == engagement.id)).all()),
     )
     return EngagementWorkspace(
         engagement=_entity_summary(engagement),
@@ -731,8 +1002,10 @@ def get_workstream_workspace(
 ) -> WorkstreamWorkspace:
     workstream = _get_or_404(db, Workstream, workstream_id, "Workstream")
     engagement = _get_or_404(db, Engagement, workstream.engagement_id, "Engagement")
-    deliverables = list(
-        db.scalars(select(Deliverable).where(Deliverable.workstream_id == workstream.id).order_by(Deliverable.created_at.desc())).all()
+    deliverables = _sort_for_my_work_priority(
+        db,
+        "deliverables",
+        list(db.scalars(select(Deliverable).where(Deliverable.workstream_id == workstream.id)).all()),
     )
     return WorkstreamWorkspace(
         engagement=_entity_summary(engagement),
@@ -795,7 +1068,11 @@ def get_deliverable_workspace(
     deliverable = _get_or_404(db, Deliverable, deliverable_id, "Deliverable")
     workstream = _get_or_404(db, Workstream, deliverable.workstream_id, "Workstream")
     engagement = _get_or_404(db, Engagement, workstream.engagement_id, "Engagement")
-    tasks = list(db.scalars(select(Task).where(Task.deliverable_id == deliverable.id).order_by(Task.created_at.desc())).all())
+    tasks = _sort_for_my_work_priority(
+        db,
+        "tasks",
+        list(db.scalars(select(Task).where(Task.deliverable_id == deliverable.id)).all()),
+    )
     return DeliverableWorkspace(
         engagement=_entity_summary(engagement),
         workstream=_entity_summary(workstream),
@@ -856,7 +1133,11 @@ def get_task_workspace(
     _: Annotated[dict[str, Any], Depends(require_authenticated_request)],
 ) -> TaskWorkspace:
     engagement, workstream, deliverable, task = _get_hierarchy_for_task(db, task_id)
-    subtasks = list(db.scalars(select(Subtask).where(Subtask.task_id == task.id).order_by(Subtask.created_at.desc())).all())
+    subtasks = _sort_for_my_work_priority(
+        db,
+        "subtasks",
+        list(db.scalars(select(Subtask).where(Subtask.task_id == task.id)).all()),
+    )
     return TaskWorkspace(
         engagement=_entity_summary(engagement),
         workstream=_entity_summary(workstream),

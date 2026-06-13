@@ -384,3 +384,93 @@
     justify-content: flex-start;
   }
 }
+
+.mvp18-breadcrumb-link {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #475569;
+  font: inherit;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.mvp18-breadcrumb-link:hover {
+  color: #0f172a;
+  text-decoration: underline;
+}
+
+.mvp18-breadcrumb-root {
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.mvp18-mywork-section {
+  margin-top: 24px;
+}
+
+.mvp18-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.mvp18-section-header h2 {
+  margin: 0 0 6px;
+}
+
+.mvp18-section-header p {
+  margin: 0;
+  color: #64748b;
+}
+
+.mvp18-summary-card.static-card {
+  cursor: default;
+  text-align: left;
+}
+
+.mvp18-task-metadata-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(260px, 1fr));
+  gap: 10px 22px;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.mvp18-task-metadata-item {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 8px;
+  align-items: start;
+  min-width: 0;
+}
+
+.mvp18-task-metadata-label {
+  color: #475569;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.mvp18-task-metadata-value {
+  color: #0f172a;
+  font-size: 0.92rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .mvp18-task-metadata-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mvp18-task-metadata-item {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+}
